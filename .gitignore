@@ -231,6 +231,7 @@ data/input/*
 *.sqlite
 *.sqlite3
 .cache/
+.pytest-tmp/
 # Frontend
 node_modules/
 frontend/dist/

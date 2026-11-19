@@ -1,0 +1,11 @@
+player_id,display_name,manager_id,segment,country,registered_at
+p-001,Demo Player 001,mgr-01,platinum,DE,2023-04-11
+p-002,Demo Player 002,mgr-01,gold,PL,2024-01-20
+p-003,Demo Player 003,mgr-02,gold,CA,2022-09-02
+p-004,Demo Player 004,mgr-02,platinum,FI,2023-12-30
+p-005,Demo Player 005,mgr-01,silver,BR,2025-03-15
+p-006,Demo Player 006,mgr-02,gold,AT,2024-07-07
+p-007,Demo Player 007,mgr-01,silver,NO,2025-06-01
+p-008,Demo Player 008,mgr-02,platinum,NZ,2021-11-19
+p-002,Duplicate Row,mgr-02,gold,PL,2024-01-20
+,Row Without Id,mgr-01,silver,ES,2025-01-01
