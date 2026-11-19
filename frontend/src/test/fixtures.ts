@@ -1,4 +1,4 @@
-import type { Meta, Overview, QueueItem } from "../api/types";
+import type { ConversationDetail, Meta, Overview, QueueItem } from "../api/types";
 
 export const meta: Meta = {
   as_of: "2026-11-12T13:00:00Z",
@@ -20,11 +20,14 @@ export function queueItem(overrides: Partial<QueueItem> = {}): QueueItem {
     priority: "P0",
     route: "manager",
     category: "withdrawal",
+    sentiment: "negative",
     summary: "Игрок ждёт вывод 5000€ больше суток.",
     next_action: "Проверить статус вывода и сообщить срок.",
     wait_hours: 27,
     awaiting_reply: true,
     overdue: true,
+    sla_hours: 4,
+    sla_lane: "breached",
     requires_review: false,
     quality_flags: [],
     reasons: [{ code: "sla.money_critical", text: "Финансовый запрос без ответа 27 ч (порог 24 ч)" }],
@@ -83,4 +86,85 @@ export function serveApi(
     return new Response(JSON.stringify(body), { status: 200 });
   });
   return calls;
+}
+
+/** d-001 as the API returns it: two cited messages, one pending. */
+export function conversation(overrides: Partial<ConversationDetail> = {}): ConversationDetail {
+  return {
+    conversation_id: "d-001",
+    channel: "telegram",
+    player: {
+      player_id: "p-001",
+      display_name: "Demo Player 001",
+      manager_id: "mgr-01",
+      segment: "platinum",
+      country: "DE",
+      registered_at: "2023-04-11",
+    },
+    messages: [
+      {
+        message_id: "m-001-1",
+        sender_role: "player",
+        sent_at: "2026-11-10T09:00:00Z",
+        text: "Вывел 5000€, до сих пор не пришло.",
+        is_evidence: true,
+        is_pending: false,
+      },
+      {
+        message_id: "m-001-2",
+        sender_role: "manager",
+        sent_at: "2026-11-10T09:20:00Z",
+        text: "Проверю статус и вернусь сегодня.",
+        is_evidence: false,
+        is_pending: false,
+      },
+      {
+        message_id: "m-001-3",
+        sender_role: "player",
+        sent_at: "2026-11-11T10:00:00Z",
+        text: "Прошли сутки, ответа нет.",
+        is_evidence: false,
+        is_pending: true,
+      },
+    ],
+    analysis: {
+      status: "ok",
+      category: "withdrawal",
+      sentiment: "negative",
+      urgency: "high",
+      summary: "Игрок ждёт вывод больше суток, менеджер не вернулся с ответом.",
+      confidence: 0.55,
+      safety_flag: "none",
+      needs_escalation: true,
+      model: "fake:heuristic-v1",
+      simulated: true,
+      label: "эвристика fake, без модели",
+      message: null,
+    },
+    task: {
+      task_id: 1,
+      status: "open",
+      priority: "P0",
+      route: "manager",
+      next_action: "Проверить статус вывода у платёжной команды и сообщить игроку срок.",
+      reasons: [
+        { code: "sla.money_critical", text: "Финансовый запрос без ответа 27 ч (порог 24 ч)" },
+        { code: "analysis.escalation", text: "Рекомендована эскалация (эвристика fake, без модели)" },
+      ],
+      quality_flags: [],
+      requires_review: false,
+      suppress_offers: false,
+      updated_at: "2026-11-19T09:00:00Z",
+      resolved_at: null,
+    },
+    facts: {
+      as_of: "2026-11-12T13:00:00Z",
+      awaiting_reply: true,
+      wait_hours: 27,
+      response_sla_hours: 4,
+      sla_breached: true,
+      median_response_minutes: 20,
+    },
+    ...overrides,
+  };
 }

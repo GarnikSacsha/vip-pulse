@@ -67,3 +67,24 @@ html {
 body {
   font-family: var(--font-sans);
 }
+
+/* Pulse indicator: a soft halo, only for conversations about to breach the SLA. */
+@keyframes vp-pulse {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+/* Output of the offline stand-in: hatched so it never passes for model output. */
+@utility hatch {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 7px,
+    color-mix(in oklab, var(--color-warn) 9%, transparent) 7px 8px
+  );
+}
