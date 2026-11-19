@@ -13,6 +13,7 @@ import {
   SENDER_LABEL,
   SENTIMENT_LABEL,
   STATUS_LABEL,
+  alertText,
   qualityFlagLabel,
 } from "../lib/labels";
 import { useApi } from "../lib/useApi";
@@ -253,6 +254,17 @@ function Conversation({
                   <p className="mt-0.5">Игрок сообщил о проблеме с контролем игры. Подключите специалиста.</p>
                 </div>
               )}
+              {task?.alerts.map((alert) => (
+                <div
+                  key={alert}
+                  role="note"
+                  aria-label="Уведомление менеджеру"
+                  className="rounded-lg border border-warn-line bg-warn-soft p-3.5 text-sm text-warn"
+                >
+                  <p className="font-medium">{alertText(alert).title}</p>
+                  <p className="mt-0.5">{alertText(alert).action}</p>
+                </div>
+              ))}
               {task && <NextStep task={task} onChanged={onChanged} />}
               {task && <Reasons task={task} />}
               <AnalysisCard analysis={analysis} messages={data.messages} highlight={highlight} />

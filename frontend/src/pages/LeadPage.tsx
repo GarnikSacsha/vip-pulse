@@ -19,6 +19,12 @@ interface Group {
 // Overdue work is not a group here: the SLA board above shows it as the «Горит» lane.
 const GROUPS: Group[] = [
   {
+    id: "contact",
+    title: "Нужен личный контакт",
+    description: "Возможен второй аккаунт или общая карта: менеджер связывается с игроком сам.",
+    pick: (i) => i.alerts.length > 0,
+  },
+  {
     id: "escalated",
     title: "Эскалации",
     description: "Ведёт не менеджер: специалист по ответственной игре или безопасность.",

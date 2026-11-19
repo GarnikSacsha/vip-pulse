@@ -297,3 +297,12 @@ describe("inbox: review fixes", () => {
   });
 });
 
+describe("inbox: manager alerts", () => {
+  it("marks conversations where the manager must contact the player personally", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/queue": [queueItem({ alerts: ["multi_account"] })] });
+    renderQueue();
+    const row = await screen.findByRole("link", { name: /Demo Player 001/ });
+    expect(within(row).getByText("Связаться лично")).toBeInTheDocument();
+  });
+});
+

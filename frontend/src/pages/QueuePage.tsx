@@ -5,7 +5,7 @@ import type { Meta, Priority, QueueFilters, QueueItem, TaskStatus } from "../api
 import { PriorityBadge, Tag } from "../components/Badges";
 import { Pulse } from "../components/Pulse";
 import { formatWait } from "../lib/format";
-import { CATEGORY_LABEL, CHANNEL_LABEL, ROUTE_LABEL, STATUS_LABEL, qualityFlagLabel } from "../lib/labels";
+import { CATEGORY_LABEL, CHANNEL_LABEL, ROUTE_LABEL, STATUS_LABEL, alertText, qualityFlagLabel } from "../lib/labels";
 import { useApi } from "../lib/useApi";
 
 type View = "active" | "all" | "resolved" | "no_action";
@@ -322,6 +322,11 @@ function QueueRow({ item, search }: { item: QueueItem; search: string }) {
           {item.quality_flags.map((f) => (
             <Tag key={f} tone="danger">
               {qualityFlagLabel(f)}
+            </Tag>
+          ))}
+          {[...new Set(item.alerts.map((a) => alertText(a).tag))].map((tag) => (
+            <Tag key={tag} tone="warn">
+              {tag}
             </Tag>
           ))}
           {item.overdue && <Tag tone="danger">Просрочено</Tag>}

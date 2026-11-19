@@ -73,6 +73,8 @@ export interface QueueItem {
   sla_lane: SlaLane;
   requires_review: boolean;
   quality_flags: string[];
+  /** Personal-contact alerts from the policy, e.g. "multi_account". */
+  alerts: string[];
   reasons: Reason[];
   last_message_at: string;
   simulated: boolean;
@@ -110,6 +112,8 @@ export interface TaskOut {
   next_action: string | null;
   reasons: Reason[];
   quality_flags: string[];
+  /** Personal-contact alerts from the policy, e.g. "multi_account". */
+  alerts: string[];
   requires_review: boolean;
   suppress_offers: boolean;
   updated_at: string;

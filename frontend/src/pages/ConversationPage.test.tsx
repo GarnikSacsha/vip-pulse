@@ -325,3 +325,15 @@ describe("conversation pane: review fixes", () => {
   });
 });
 
+describe("conversation pane: manager alerts", () => {
+  it("shows a personal-contact notice for a possible second account", async () => {
+    const base = detail();
+    if (!base.task) throw new Error("fixture");
+    serve(detail({ task: { ...base.task, alerts: ["multi_account"] } }));
+    renderPage();
+    const notice = await screen.findByRole("note", { name: "Уведомление менеджеру" });
+    expect(notice).toHaveTextContent("Возможен второй аккаунт или общая карта");
+    expect(notice).toHaveTextContent("Свяжитесь с игроком лично");
+  });
+});
+

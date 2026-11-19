@@ -63,6 +63,20 @@ const QUALITY_FLAG_LABEL: Record<string, string> = {
   offer_to_restricted_player: "Бонус игроку с ограничением",
 };
 
+/** Alerts that need the manager personally: short tag, headline and what to do. */
+export const ALERT_TEXT: Record<string, { tag: string; title: string; action: string }> = {
+  multi_account: {
+    tag: "Связаться лично",
+    title: "Возможен второй аккаунт или общая карта",
+    action:
+      "Свяжитесь с игроком лично: уточните, чей это аккаунт и чья карта. Бонус на другой аккаунт не начисляйте до проверки.",
+  },
+};
+
+export function alertText(alert: string): { tag: string; title: string; action: string } {
+  return ALERT_TEXT[alert] ?? { tag: "Связаться лично", title: alert, action: "Свяжитесь с игроком лично." };
+}
+
 export function qualityFlagLabel(flag: string): string {
   return QUALITY_FLAG_LABEL[flag] ?? flag;
 }
