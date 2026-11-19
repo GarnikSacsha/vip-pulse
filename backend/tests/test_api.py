@@ -77,6 +77,8 @@ def test_queue_is_sorted_by_priority_then_wait(client: TestClient) -> None:
         "display_name": "Demo Player 001",
         "manager_id": "mgr-01",
         "segment": "platinum",
+        "country": "DE",
+        "registered_at": "2023-04-11",
     }
     assert first["category"] == "withdrawal"
     assert first["status"] == "open"
@@ -385,3 +387,34 @@ def test_meta_reports_budget_of_a_paid_provider(sample_paths) -> None:
         info = c.get("/api/meta").json()["provider"]
     assert info["budget_usd"] == 1.0
     assert info["spent_usd"] == pytest.approx(0.09)
+
+
+# --- SLA lanes (team lead board, pulse indicator) -------------------------------------------
+
+
+def test_queue_items_carry_sla_hours_and_lane(client: TestClient) -> None:
+    items = {i["conversation_id"]: i for i in client.get("/api/queue").json()}
+    assert items["d-009"]["sla_hours"] == 8.0  # email override
+    assert items["d-001"]["sla_hours"] == 4.0
+    assert items["d-001"]["sla_lane"] == "breached"
+    assert items["d-003"]["sla_lane"] == "ok"  # waits, but needs no action
+    for item in items.values():
+        assert (item["sla_lane"] == "breached") == item["overdue"], item["conversation_id"]
+
+
+# --- player dossier ---------------------------------------------------------------------------
+
+
+def test_queue_filters_by_player_and_carries_dossier_fields(client: TestClient) -> None:
+    items = client.get("/api/queue", params={"player": "p-001"}).json()
+    assert {i["conversation_id"] for i in items} == {"d-001", "d-010"}
+    player = items[0]["player"]
+    assert player["country"] == "DE"
+    assert player["registered_at"] == "2023-04-11"
+    assert items[0]["sentiment"] in {"positive", "neutral", "negative", "mixed"}
+
+
+def test_failed_analysis_has_no_sentiment(sample_paths) -> None:
+    with TestClient(create_app(engine=_engine(sample_paths, BrokenProvider()))) as c:
+        items = c.get("/api/queue").json()
+    assert {i["sentiment"] for i in items} == {None}

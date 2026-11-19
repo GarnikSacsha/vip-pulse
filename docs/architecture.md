@@ -92,4 +92,6 @@ Full records with evidence and rejected alternatives are in [`docs/decisions/`](
    contract wait for the files.
 4. **Done — stage 2c (oversight views):** `/api/overview` and the team lead / head-of-VIP pages,
    computed from the same queue the managers see.
-5. **Then:** gold set evaluation, visual polish, one-page brief, demo.
+5. **Done — stage 3 (UI design):** three-pane inbox, evidence pills, player dossier, pulse
+   indicator, SLA lanes ([0009](decisions/0009-inbox-layout-and-sla-lanes.md)).
+6. **Then:** gold set evaluation, screenshots, one-page brief, demo.

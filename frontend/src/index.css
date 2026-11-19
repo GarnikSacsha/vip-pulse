@@ -1,9 +1,33 @@
 @import "tailwindcss";
 
+/* Self-hosted fonts (OFL, licences next to the files in public/fonts). No request leaves the app.
+   InterVariable carries the optical-size axis, so headings get the Display cut automatically. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/InterVariable.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/JetBrainsMono-Medium.woff2") format("woff2");
+}
+
 /* Calm, light, low-noise palette. Colour carries meaning only: priority, warnings, evidence. */
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
 
   --color-canvas: #f7f7f8;
   --color-surface: #ffffff;
@@ -37,8 +61,30 @@
 
 html {
   -webkit-font-smoothing: antialiased;
+  font-optical-sizing: auto;
 }
 
 body {
   font-family: var(--font-sans);
+}
+
+/* Pulse indicator: a soft halo, only for conversations about to breach the SLA. */
+@keyframes vp-pulse {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+/* Output of the offline stand-in: hatched so it never passes for model output. */
+@utility hatch {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 7px,
+    color-mix(in oklab, var(--color-warn) 9%, transparent) 7px 8px
+  );
 }

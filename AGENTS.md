@@ -101,8 +101,11 @@ system temp directory on the dev machine cannot be cleaned by pytest.
 - Stage 1 (backend foundation): PR #1, merged. Built before the harness was read: tests were
   written after the code, no RED evidence. Corrective commits in the same PR.
 - Stage 2a (browser slice): PR #2, merged. Persisted analyses, tasks + audit, REST API, React UI.
-- Stage 2b: Gemini provider, spending cap, bounded concurrency (branch
-  `feat/stage-2b-gemini-provider`); real-data adapter and data contract wait for the files.
+- Stage 2b: Gemini provider, spending cap, bounded concurrency: PR #3, merged. Real-data
+  adapter and data contract wait for the files.
+- Stage 2c (team lead and head-of-VIP views): PR #4, merged.
+- Stage 3 (UI design from `design/README.md`): branch `feat/stage-3-ui-design`. Fonts are
+  self-hosted assets in `frontend/public/fonts/` (approved by Denys, 2026-11-19), not npm packages.
   Strict TDD with RED/GREEN evidence recorded in the PR.
 - Commit map: written before each stage; one atomic GREEN commit per coherent outcome.
 - Local-commit authorization: granted for agreed stages.

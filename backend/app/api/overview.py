@@ -5,10 +5,12 @@ screen always matches the list behind it. Nothing is estimated or hard-coded.
 """
 
 from collections import Counter, defaultdict
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 
+from app.api.deps import get_policy
 from app.api.queue import ACTIVE, SessionDep, _as_of, list_queue
 from app.api.schemas import (
     CategoryCount,
@@ -20,6 +22,7 @@ from app.api.schemas import (
     QueueItem,
 )
 from app.models import AnalysisRow, ConversationRow, TaskRow
+from app.policy.config import PolicyConfig
 from app.policy.priority import Route
 from app.schemas.analysis import Priority, ProcessingStatus
 from app.tasks.service import TaskStatus
@@ -95,8 +98,8 @@ def _channels(items: list[QueueItem]) -> list[ChannelCount]:
 
 
 @router.get("/overview", response_model=Overview)
-def overview(session: SessionDep) -> Overview:
-    items = list_queue(session)
+def overview(session: SessionDep, policy: Annotated[PolicyConfig, Depends(get_policy)]) -> Overview:
+    items = list_queue(session, policy=policy)
     statuses = dict(
         session.execute(
             select(AnalysisRow.status, func.count())
