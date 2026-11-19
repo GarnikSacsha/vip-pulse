@@ -1,0 +1,55 @@
+# Hand-labelled expectations for the synthetic sample, used by `app.cli eval`.
+# Labelled by the agent from the message text, 2026-11-19; to be reviewed by Denys.
+# Each field lists every acceptable answer: where a careful human could go either way, both count.
+# Fields: category, requires_action, safety_flag, sentiment; `cite` = at least one of these
+# message ids must be among the model's evidence (checked only when the model must cite).
+
+d-001:  # withdrawal unanswered for a day, threat to leave
+  category: [withdrawal]
+  requires_action: [true]
+  safety_flag: [none]
+  sentiment: [negative]
+  cite: [m-001-1, m-001-3]
+d-002:  # deposit delay, solved, player thanks
+  category: [deposit]
+  requires_action: [false]
+  safety_flag: [none]
+  sentiment: [positive, mixed]
+d-003:  # birthday greeting, player thanks
+  category: [general]
+  requires_action: [false]
+  safety_flag: [none]
+  sentiment: [positive]
+d-004:  # asks for self-exclusion; manager offered free spins
+  category: [responsible_gaming]
+  requires_action: [true]
+  safety_flag: [responsible_gaming]
+  sentiment: [negative]
+  cite: [m-004-1]
+d-005:  # verification pending, blocks withdrawal
+  category: [verification]
+  requires_action: [true]
+  safety_flag: [none]
+  sentiment: [neutral, negative]
+  cite: [m-005-1, m-005-3]
+d-006:  # app crashes; manager gave instructions, ball is with the player
+  category: [technical]
+  requires_action: [false, true]
+  safety_flag: [none]
+  sentiment: [negative, neutral]
+d-007:  # a single "?"
+  category: [other, general]
+  requires_action: [true, false]
+  safety_flag: [none]
+  sentiment: [neutral]
+d-009:  # login from an unknown device, "it was not me"
+  category: [account]
+  requires_action: [true]
+  safety_flag: [fraud_security]
+  sentiment: [negative]
+  cite: [m-009-1]
+d-010:  # manager offers a tournament, no reply yet
+  category: [general, other]
+  requires_action: [false]
+  safety_flag: [none]
+  sentiment: [neutral]

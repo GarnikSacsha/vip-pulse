@@ -2,12 +2,16 @@
 
 python -m app.cli import --players PLAYERS.csv --dialogs DIALOGS.json [--dry-run]
 python -m app.cli triage [--limit N]   # analyse, save work items, print the queue
+python -m app.cli eval --gold GOLD.yaml # score stored analyses against hand labels
 """
 
 import argparse
 import sys
 from pathlib import Path
 
+from sqlalchemy import select
+
+from app.analysis.evaluate import evaluate, load_gold
 from app.analysis.llm import get_provider
 from app.api.queue import list_queue
 from app.api.schemas import QueueItem
@@ -17,6 +21,7 @@ from app.ingestion.adapters import ADAPTERS, get_adapter
 from app.ingestion.pipeline import ingest
 from app.ingestion.report import ImportReport
 from app.ingestion.store import load_conversations, save_bundle
+from app.models import AnalysisRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.policy.facts import dataset_as_of
 from app.tasks.service import RunInProgress, run_triage
@@ -109,6 +114,48 @@ def cmd_triage(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_eval(args: argparse.Namespace) -> int:
+    if not args.gold.is_file():
+        print(f"file not found: {args.gold}", file=sys.stderr)
+        return 2
+    gold = load_gold(args.gold)
+    engine = make_engine(args.database_url)
+    init_db(engine)
+    results: dict = {}
+    models: set[str] = set()
+    simulated = False
+    for session in session_scope(engine):
+        rows = session.execute(
+            select(TaskRow.conversation_id, AnalysisRow).outerjoin(
+                AnalysisRow, AnalysisRow.id == TaskRow.analysis_id
+            )
+        )
+        for cid, analysis in rows:
+            ok = analysis is not None and analysis.status == "ok" and analysis.result
+            results[cid] = analysis.result if ok else None
+            if analysis is not None:
+                models.add(analysis.model or "?")
+                simulated = simulated or analysis.simulated
+    if not results:
+        print("no analysed conversations; run `triage` first", file=sys.stderr)
+        return 1
+
+    report = evaluate(results, gold)
+    source = ", ".join(sorted(models)) or "-"
+    kind = "simulated (offline heuristic, not a model)" if simulated else "model"
+    print(f"{len(gold)} conversations in the gold set · analyses by {source} · {kind}")
+    for name, (right, total) in report.scores.items():
+        share = f"{right / total:.0%}" if total else "-"
+        print(f"  {name:16} {right}/{total}  {share}")
+    if report.safety_misses:
+        print("safety flag missed (most costly): " + ", ".join(report.safety_misses))
+    if report.failed:
+        print("no analysis: " + ", ".join(report.failed))
+    for cid, name, got, expected in report.mismatches:
+        print(f"  {cid:6} {name:16} got {got!r}, expected {expected}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vip-pulse")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -128,6 +175,11 @@ def build_parser() -> argparse.ArgumentParser:
     tri.add_argument("--policy", default=None, help="thresholds YAML, defaults to POLICY_PATH")
     tri.add_argument("--limit", type=int, default=0, help="show only the first N items")
     tri.set_defaults(func=cmd_triage)
+
+    ev = sub.add_parser("eval", help="score stored analyses against a hand-labelled gold set")
+    ev.add_argument("--gold", type=Path, required=True)
+    ev.add_argument("--database-url", default=None, help="defaults to DATABASE_URL")
+    ev.set_defaults(func=cmd_eval)
     return parser
 
 
