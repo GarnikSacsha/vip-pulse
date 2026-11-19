@@ -71,3 +71,12 @@ describe("team lead page", () => {
     expect(within(quality).getByText("Нет")).toBeInTheDocument();
   });
 });
+
+describe("team lead page: review fixes", () => {
+  it("labels stand-in analysis in the exception lists", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [late] });
+    renderLead();
+    const overdue = await screen.findByRole("region", { name: /Просрочен ответ/ });
+    expect(within(overdue).getByText("демо")).toBeInTheDocument();
+  });
+});

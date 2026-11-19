@@ -105,7 +105,8 @@ export function QueuePage() {
       <div role="tablist" className="mb-3 flex gap-5 overflow-x-auto border-b border-line text-sm">
         {VIEWS.map((v) => {
           const selected = v.id === view.id;
-          const count = viewCount(v, meta);
+          // Meta counts the whole department: wrong on one manager's queue, so hidden there.
+          const count = manager ? null : viewCount(v, meta);
           return (
             <button
               key={v.id}
@@ -129,12 +130,18 @@ export function QueuePage() {
         })}
       </div>
 
-      <QueueBody queue={queue} />
+      <QueueBody queue={queue} managerFilter={Boolean(manager)} />
     </section>
   );
 }
 
-function QueueBody({ queue }: { queue: ReturnType<typeof useApi<QueueItem[]>> }) {
+function QueueBody({
+  queue,
+  managerFilter,
+}: {
+  queue: ReturnType<typeof useApi<QueueItem[]>>;
+  managerFilter: boolean;
+}) {
   if (queue.error) {
     return (
       <div role="alert" className="rounded-lg border border-danger-line bg-danger-soft p-4 text-sm text-danger">
@@ -162,7 +169,11 @@ function QueueBody({ queue }: { queue: ReturnType<typeof useApi<QueueItem[]>> })
     return (
       <div className="rounded-lg border border-dashed border-line bg-surface px-4 py-10 text-center">
         <p className="text-sm font-medium">Нет диалогов по этому фильтру</p>
-        <p className="mt-1 text-sm text-muted">Попробуйте вкладку «Все» или снимите фильтр приоритета.</p>
+        <p className="mt-1 text-sm text-muted">
+          {managerFilter
+            ? "Снимите фильтр менеджера над списком или откройте вкладку «Все»."
+            : "Попробуйте вкладку «Все» или снимите фильтр приоритета."}
+        </p>
       </div>
     );
   }
@@ -212,6 +223,7 @@ function QueueRow({ item }: { item: QueueItem }) {
             </Tag>
           ))}
           {item.overdue && <Tag tone="danger">Просрочено</Tag>}
+          {item.simulated && <Tag>демо</Tag>}
           {item.requires_review && <Tag tone="warn">Нужна проверка</Tag>}
           {(item.status === "in_progress" || item.status === "resolved") && (
             <Tag tone={item.status === "resolved" ? "ok" : "accent"}>{STATUS_LABEL[item.status]}</Tag>

@@ -95,6 +95,7 @@ export function CompactItem({ item }: { item: QueueItem }) {
               {qualityFlagLabel(f)}
             </Tag>
           ))}
+          {item.simulated && <Tag>демо</Tag>}
         </div>
       </div>
       <span className={`shrink-0 text-sm tabular-nums ${item.overdue ? "font-medium text-danger" : "text-muted"}`}>

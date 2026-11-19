@@ -153,6 +153,29 @@ function Routes({ routes }: { routes: Overview["routes"] }) {
   );
 }
 
+/** Who produced the categories. Never credits the model for results it did not produce. */
+function Provenance({ coverage: c }: { coverage: Overview["coverage"] }) {
+  if (c.analysed === 0) {
+    return <>Категории не определены: автоматический разбор не выполнен, приоритеты посчитаны по правилам.</>;
+  }
+  if (c.simulated === c.analysed) {
+    return (
+      <strong className="font-medium text-warn">
+        Категории посчитала эвристика без модели: это демо-режим, а не вывод языковой модели.
+      </strong>
+    );
+  }
+  if (c.simulated > 0) {
+    return (
+      <strong className="font-medium text-warn">
+        {c.simulated} из {c.analysed} результатов — демо-эвристика без модели, остальные определила языковая
+        модель.
+      </strong>
+    );
+  }
+  return <>Категории определила языковая модель; приоритеты и SLA считает код.</>;
+}
+
 function Source({ data }: { data: Overview }) {
   const c = data.coverage;
   return (
@@ -160,14 +183,9 @@ function Source({ data }: { data: Overview }) {
       <div className="space-y-2 px-4 py-3 text-sm text-muted">
         <p>
           {c.conversations} {plural(c.conversations, ["диалог", "диалога", "диалогов"])}
-          {data.as_of && <> на {formatDateTime(data.as_of)}</>}. Разобрано {c.analysed}, не удалось {c.failed}.{" "}
-          {c.simulated ? (
-            <strong className="font-medium text-warn">
-              Категории посчитала эвристика без модели: это демо-режим, а не вывод языковой модели.
-            </strong>
-          ) : (
-            <>Категории определила языковая модель; приоритеты и SLA считает код.</>
-          )}
+          {data.as_of && <> на {formatDateTime(data.as_of)}</>}
+          {c.conversations > c.in_queue && <>, из них {c.conversations - c.in_queue} ещё не разобраны</>}. Разобрано{" "}
+          {c.analysed}, не удалось {c.failed}. <Provenance coverage={c} />
         </p>
         <p>
           «Просрочено» — игрок ждёт ответа дольше порога своего канала. Пороги — допущения из{" "}

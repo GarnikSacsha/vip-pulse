@@ -132,3 +132,27 @@ describe("queue page: oversight links", () => {
     expect(within(row).getByText("Просрочено")).toBeInTheDocument();
   });
 });
+
+describe("queue page: review fixes", () => {
+  it("does not show department-wide counters on a manager's queue", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/queue": [queueItem()] });
+    renderQueue("/queue?manager=mgr-01");
+    await screen.findAllByRole("link", { name: /Demo Player/ });
+    expect(screen.getByRole("tab", { name: "Активные" })).toBeInTheDocument();
+  });
+
+  it("points at the manager filter when it empties the list", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/queue": [] });
+    renderQueue("/queue?manager=mgr-02");
+    expect(await screen.findByText(/фильтр менеджера/)).toBeInTheDocument();
+  });
+
+  it("labels stand-in analysis on every row", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/queue": [queueItem(), queueItem({ task_id: 2, conversation_id: "d-002", simulated: false })] });
+    renderQueue();
+    const [demo, model] = await screen.findAllByRole("link", { name: /Demo Player/ });
+    if (!demo || !model) throw new Error("rows");
+    expect(within(demo).getByText("демо")).toBeInTheDocument();
+    expect(within(model).queryByText("демо")).not.toBeInTheDocument();
+  });
+});

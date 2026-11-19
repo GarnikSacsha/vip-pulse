@@ -49,3 +49,32 @@ describe("head of VIP page", () => {
     expect(link).toHaveAttribute("href", "/queue?priority=P0");
   });
 });
+
+describe("head of VIP page: where the numbers come from", () => {
+  async function source(coverage: Partial<typeof overview.coverage>) {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": { ...overview, coverage: { ...overview.coverage, ...coverage } } });
+    renderOverview();
+    return screen.findByRole("region", { name: "Откуда цифры" });
+  }
+
+  it("does not credit the model when every analysis failed", async () => {
+    const region = await source({ analysed: 0, failed: 9, simulated: 0 });
+    expect(region).toHaveTextContent("Категории не определены");
+    expect(region).not.toHaveTextContent("языковая модель");
+  });
+
+  it("says how many results are demo when the run is mixed", async () => {
+    const region = await source({ analysed: 9, simulated: 3 });
+    expect(region).toHaveTextContent("3 из 9");
+  });
+
+  it("credits the model only when it produced every result", async () => {
+    const region = await source({ analysed: 9, simulated: 0 });
+    expect(region).toHaveTextContent("языковая модель");
+  });
+
+  it("mentions conversations that are not triaged yet", async () => {
+    const region = await source({ conversations: 12, in_queue: 9 });
+    expect(region).toHaveTextContent("3 ещё не разобраны");
+  });
+});

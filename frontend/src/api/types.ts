@@ -184,7 +184,15 @@ export interface Overview {
   categories: CategoryCount[];
   channels: ChannelCount[];
   routes: Record<Route, number>;
-  coverage: { conversations: number; analysed: number; failed: number; simulated: boolean };
+  coverage: {
+    conversations: number;
+    /** Conversations with a work item; the rest wait for a triage run. */
+    in_queue: number;
+    analysed: number;
+    failed: number;
+    /** Of `analysed`: produced by the offline stand-in, not a model. */
+    simulated: number;
+  };
 }
 
 export interface StatusChange {

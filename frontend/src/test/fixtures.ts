@@ -64,7 +64,7 @@ export const overview: Overview = {
     { channel: "email", total: 4, active: 1, overdue: 0 },
   ],
   routes: { manager: 3, rg_specialist: 1, security: 1 },
-  coverage: { conversations: 9, analysed: 9, failed: 0, simulated: true },
+  coverage: { conversations: 9, in_queue: 9, analysed: 9, failed: 0, simulated: 9 },
 };
 
 /** Mocks fetch with a path -> body map; records requested URLs. */
