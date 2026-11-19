@@ -8,8 +8,9 @@ conclusion points to the exact messages it is based on, and responsible-gaming c
 human specialist.
 
 > **Status:** the full path works end to end on synthetic data: import → analysis → prioritised
-> queue in the browser → conversation with evidence → status change with history. Analysis is
-> done by an offline heuristic until Gemini is connected; the UI says so on every screen.
+> queue in the browser → conversation with evidence → status change with history. By default
+> analysis is done by an offline heuristic (the UI says so on every screen); Gemini is built in and
+> switched on with an API key, under a hard spending cap.
 > See [what is done and what is next](#status).
 
 ## Who it is for
@@ -87,16 +88,32 @@ P0  d-004  p-004   telegram  responsible_gaming       -  rg_specialist   Пер�
     why: Сигнал ответственной игры у игрока; Менеджер предложил бонус игроку с сигналом ответственной игры; …
 ```
 
+### Run with Gemini
+
+Put the key in `backend/.env` and switch the provider:
+
+```
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=...
+LLM_BUDGET_USD=1.0
+```
+
+Then `app.cli triage` (or the API) analyses with Gemini. Every billed call is written to the
+`llm_calls` table; a call that could push the total over `LLM_BUDGET_USD` is not sent, and the
+conversation goes to human review instead. The CLI prints the spend of the run and what is left.
+Use a paid-tier key for task data: on the free tier Google may use the content to improve its
+products ([decision 0008](docs/decisions/0008-gemini-provider-and-spending-cap.md)).
+
 ## API
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/meta` | Dataset date, provider with its label, counts by status and priority |
+| GET | `/api/meta` | Dataset date, provider with its label and budget, counts by status and priority |
 | GET | `/api/queue?status=&priority=&route=` | Work items, most urgent first |
 | GET | `/api/conversations/{id}` | Messages (evidence and pending marked), analysis, task, reasons, facts |
 | PATCH | `/api/tasks/{id}` | Change status (`open`, `in_progress`, `resolved`) with an optional note |
 | GET | `/api/tasks/{id}/audit` | Status history |
-| POST | `/api/triage/run` | Re-run analysis; unchanged conversations are served from cache |
+| POST | `/api/triage/run` | Re-run analysis; cached conversations are not re-sent; reports spend; 409 while a run is in progress |
 | GET | `/health` | Liveness |
 
 ## Checks
@@ -122,7 +139,7 @@ backend/app/
   schemas/      Pydantic contracts: domain model, taxonomy, strict LLM output
   ingestion/    format adapters, normalization, dedupe, import report, store
   policy/       facts, safety net, priority rules, thresholds.yaml
-  analysis/     prompt, LLM providers (fake now, Gemini next), validation
+  analysis/     prompt, LLM providers (fake, Gemini) with spending meter, validation
   tasks/        persisted triage, analysis cache, work items, audit
   api/          FastAPI routers and response models
   cli.py        import / triage commands
@@ -143,10 +160,11 @@ docs/
 | Done | Next |
 |---|---|
 | Import with validation report, dedupe, idempotent re-import | Adapter for the real `dialogs.json` / `players.csv` (awaiting files) |
-| Deterministic facts, SLA, safety net, priority with reasons | Gemini provider behind the existing interface |
+| Deterministic facts, SLA, safety net, priority with reasons | First live Gemini run (waiting for the key) |
 | Strict LLM contract, fail-closed evidence check, prompt-injection fencing | Team lead and head-of-VIP views |
 | Analysis cache, work items, status history | Gold set of hand-labelled conversations to measure quality |
 | Manager queue and conversation view in the browser | One-page brief and demo video |
+| Gemini provider: retries, parallel calls, $1 spending cap with a ledger | |
 
 ## Data and secrets
 
