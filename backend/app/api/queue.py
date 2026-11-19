@@ -28,6 +28,7 @@ from app.models import AnalysisRow, ConversationRow, PlayerRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.policy.facts import compute_facts
 from app.policy.priority import LABEL_MODEL, LABEL_SIMULATED, Route
+from app.policy.sla import sla_lane
 from app.schemas.analysis import Priority, ProcessingStatus
 from app.tasks.service import TaskStatus, ledger_spent
 
@@ -90,6 +91,7 @@ def meta(session: SessionDep, provider: Annotated[LLMProvider, Depends(get_provi
 @router.get("/queue", response_model=list[QueueItem])
 def queue(
     session: SessionDep,
+    policy: Annotated[PolicyConfig, Depends(get_policy)],
     status: Annotated[list[TaskStatus] | None, Query()] = None,
     priority: Annotated[list[Priority] | None, Query()] = None,
     route: Annotated[list[Route] | None, Query()] = None,
@@ -98,6 +100,7 @@ def queue(
 ) -> list[QueueItem]:
     return list_queue(
         session,
+        policy=policy,
         status=status,
         priority=priority,
         route=route,
@@ -124,6 +127,7 @@ def is_overdue(task: TaskRow) -> bool:
 def list_queue(
     session: Session,
     *,
+    policy: PolicyConfig,
     status: list[TaskStatus] | None = None,
     priority: list[Priority] | None = None,
     route: list[Route] | None = None,
@@ -131,6 +135,7 @@ def list_queue(
     overdue: bool | None = None,
 ) -> list[QueueItem]:
     """The work queue, shared by the API, the oversight views and the CLI."""
+    sla = policy.sla
     query = (
         select(TaskRow, ConversationRow, PlayerRow, AnalysisRow)
         .join(ConversationRow, ConversationRow.conversation_id == TaskRow.conversation_id)
@@ -156,6 +161,7 @@ def list_queue(
         if overdue is not None and late != overdue:
             continue
         result = _result(analysis)
+        sla_hours = sla.response_hours_for(conv.channel)
         items.append(
             QueueItem(
                 task_id=task.id,
@@ -171,6 +177,15 @@ def list_queue(
                 wait_hours=task.wait_hours if task.awaiting_reply else None,
                 awaiting_reply=task.awaiting_reply,
                 overdue=late,
+                sla_hours=sla_hours,
+                sla_lane=sla_lane(
+                    active=TaskStatus(task.status) in ACTIVE,
+                    awaiting_reply=task.awaiting_reply,
+                    wait_hours=task.wait_hours,
+                    sla_hours=sla_hours,
+                    breached=late,
+                    at_risk_share=sla.at_risk_share,
+                ),
                 requires_review=task.requires_review,
                 quality_flags=task.quality_flags,
                 reasons=[ReasonOut(**r) for r in task.reasons],

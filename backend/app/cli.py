@@ -93,7 +93,7 @@ def cmd_triage(args: argparse.Namespace) -> int:
         except RunInProgress:
             print("a triage run is already in progress", file=sys.stderr)
             return 1
-        items = list_queue(session)
+        items = list_queue(session, policy=cfg)
         as_of = dataset_as_of(load_conversations(session))
     print(f"as of {as_of:%Y-%m-%d %H:%M} UTC · provider {provider.name}:{provider.model}")
     print(

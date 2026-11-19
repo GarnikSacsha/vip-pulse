@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from app.policy.priority import Route
+from app.policy.sla import SlaLane
 from app.schemas.analysis import (
     Category,
     Priority,
@@ -65,6 +66,8 @@ class QueueItem(BaseModel):
     awaiting_reply: bool
     # Active work (open / in progress) whose player waits longer than the channel's SLA.
     overdue: bool
+    sla_hours: float  # the channel's response SLA under the current thresholds
+    sla_lane: SlaLane  # computed by app.policy.sla; "breached" exactly when overdue
     requires_review: bool
     quality_flags: list[str]
     reasons: list[ReasonOut]

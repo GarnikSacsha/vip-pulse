@@ -385,3 +385,16 @@ def test_meta_reports_budget_of_a_paid_provider(sample_paths) -> None:
         info = c.get("/api/meta").json()["provider"]
     assert info["budget_usd"] == 1.0
     assert info["spent_usd"] == pytest.approx(0.09)
+
+
+# --- SLA lanes (team lead board, pulse indicator) -------------------------------------------
+
+
+def test_queue_items_carry_sla_hours_and_lane(client: TestClient) -> None:
+    items = {i["conversation_id"]: i for i in client.get("/api/queue").json()}
+    assert items["d-009"]["sla_hours"] == 8.0  # email override
+    assert items["d-001"]["sla_hours"] == 4.0
+    assert items["d-001"]["sla_lane"] == "breached"
+    assert items["d-003"]["sla_lane"] == "ok"  # waits, but needs no action
+    for item in items.values():
+        assert (item["sla_lane"] == "breached") == item["overdue"], item["conversation_id"]
