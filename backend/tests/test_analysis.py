@@ -6,6 +6,7 @@ from typing import Any, ClassVar
 import pytest
 
 from app.analysis.llm import FakeProvider, LLMError, get_provider
+from app.analysis.llm.budget import BudgetExceeded
 from app.analysis.prompts import build_user_prompt, render_conversation
 from app.analysis.service import analyze_conversation, input_hash
 from app.config import Settings
@@ -153,10 +154,16 @@ def test_unexpected_provider_bug_does_not_retry_or_raise() -> None:
     assert provider.calls == 1
 
 
-def test_gemini_is_not_wired_yet() -> None:
-    with pytest.raises(LLMError, match="stage 2"):
-        get_provider(Settings(llm_provider="gemini"))
+def test_fake_is_the_default_provider() -> None:
     assert isinstance(get_provider(Settings(llm_provider="fake")), FakeProvider)
+
+
+def test_exhausted_budget_is_not_retried() -> None:
+    provider = ScriptedProvider(BudgetExceeded("budget exhausted"), _valid())
+    outcome = _analyze(provider)
+    assert outcome.status is ProcessingStatus.FAILED
+    assert "BudgetExceeded" in (outcome.error or "")
+    assert provider.calls == 1
 
 
 # --- end to end on the sample with the offline provider ----------------------------------

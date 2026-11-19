@@ -12,6 +12,7 @@ import re
 from pydantic import ValidationError
 
 from app.analysis.llm.base import LLMError, LLMProvider
+from app.analysis.llm.budget import BudgetExceeded
 from app.analysis.prompts import (
     PROMPT_VERSION,
     SYSTEM_PROMPT,
@@ -79,6 +80,9 @@ def analyze_conversation(
         try:
             raw = provider.complete_json(SYSTEM_PROMPT, user, response_schema())
             result = parse_output(raw, conv)
+        except BudgetExceeded as exc:  # retrying cannot help; the call was never sent
+            error = f"{type(exc).__name__}: {exc}"
+            break
         except (LLMError, InvalidOutput) as exc:
             error = f"{type(exc).__name__}: {exc}"
             continue
