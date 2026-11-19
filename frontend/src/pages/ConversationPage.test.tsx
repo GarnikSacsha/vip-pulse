@@ -189,7 +189,8 @@ describe("conversation page", () => {
       body: { status: "in_progress", actor: "demo-manager", note: "Пишу в платёжный отдел" },
     });
     expect(await screen.findByText("Статус: В работе")).toBeInTheDocument();
-    const history = screen.getByRole("list", { name: "История" });
+    // The history is a separate request that settles after the status: wait for it.
+    const history = await screen.findByRole("list", { name: "История" });
     expect(history).toHaveTextContent("Открыта → В работе");
     expect(history).toHaveTextContent("Пишу в платёжный отдел");
     expect(screen.getByLabelText("Комментарий к действию")).toHaveValue("");
