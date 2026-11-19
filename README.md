@@ -136,6 +136,28 @@ npm run lint; npm run typecheck; npm test; npm run build
 
 CI runs all of them (Python 3.12 and 3.14, Node 24) and blocks commits that contain `.env` or task data.
 
+## Measuring analysis quality
+
+`data/sample/gold.yaml` holds hand labels for the 9 sample conversations (every acceptable answer
+per field). `eval` scores the analyses already stored by `triage`; it makes no LLM calls.
+
+```powershell
+.\.venv\Scripts\python.exe -m app.cli eval --gold ..\data\sample\gold.yaml
+```
+
+Result on 2026-11-19 (category, needs action, safety flag, tone, evidence):
+
+| Analyses by | Category | Action | Safety flag | Tone | Evidence |
+|---|---|---|---|---|---|
+| Gemini (`gemini-3.8-flash`) | 9/9 | 9/9 | 9/9 | 9/9 | 9/9 |
+| Offline heuristic (`fake`) | 9/9 | 9/9 | 9/9 | 8/9 | 9/9 |
+
+What this shows: the pipeline, the contract and the evidence check work with a real model. What it
+does not show: model quality. The sample was written to cover edge cases of import and policy, and
+keyword matching solves it almost as well. A meaningful measurement needs harder cases (implicit
+responsible-gaming signals, sarcasm, two topics in one conversation) and 8–12 labelled real
+conversations once the task files arrive. The labels were drafted by the agent and need review.
+
 ## Project layout
 
 ```
