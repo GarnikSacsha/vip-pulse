@@ -6,6 +6,7 @@ from typing import Any, ClassVar
 import pytest
 
 from app.analysis.llm import FakeProvider, LLMError, get_provider
+from app.analysis.llm.base import PermanentLLMError
 from app.analysis.llm.budget import BudgetExceeded
 from app.analysis.prompts import build_user_prompt, render_conversation
 from app.analysis.service import analyze_conversation, input_hash
@@ -156,6 +157,13 @@ def test_unexpected_provider_bug_does_not_retry_or_raise() -> None:
 
 def test_fake_is_the_default_provider() -> None:
     assert isinstance(get_provider(Settings(llm_provider="fake")), FakeProvider)
+
+
+def test_permanent_provider_failure_is_not_retried() -> None:
+    provider = ScriptedProvider(PermanentLLMError("finish MAX_TOKENS"), _valid())
+    outcome = _analyze(provider)
+    assert outcome.status is ProcessingStatus.FAILED
+    assert provider.calls == 1
 
 
 def test_exhausted_budget_is_not_retried() -> None:

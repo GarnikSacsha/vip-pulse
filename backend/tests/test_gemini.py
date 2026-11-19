@@ -1,13 +1,17 @@
 """Gemini REST provider and the spending meter. No network: every HTTP exchange is scripted."""
 
+import http.client
 import json
+import urllib.error
+import urllib.request
 from typing import Any
 
 import pytest
 
 from app.analysis.llm import LLMError, get_provider
+from app.analysis.llm.base import PermanentLLMError
 from app.analysis.llm.budget import BudgetExceeded, Pricing, SpendingMeter
-from app.analysis.llm.gemini import GeminiProvider, gemini_schema
+from app.analysis.llm.gemini import GeminiProvider, RequestNotSent, gemini_schema, urllib_transport
 from app.analysis.prompts import response_schema
 from app.config import Settings
 
@@ -209,3 +213,103 @@ def test_gemini_is_built_from_settings_with_budget() -> None:
     assert provider.simulated is False
     assert provider.meter.limit_usd == 0.5
     assert provider.model == "gemini-2.5-flash"
+
+
+# --- review fixes: reservations, unsent requests, permanent failures ------------------------
+
+
+def _released(provider: GeminiProvider) -> bool:
+    """No reservation is left behind: everything not spent is available again."""
+    meter = provider.meter
+    return meter.remaining_usd == pytest.approx(meter.limit_usd - meter.spent_usd)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [[1, 2], {"candidates": [{"finishReason": 7}]}, {"candidates": "x"}],
+)
+def test_malformed_answer_fails_without_leaking_the_reservation(payload: Any) -> None:
+    provider = _provider(Transport((200, {}, payload)))
+    with pytest.raises(LLMError):
+        provider.complete_json("s", "u", SCHEMA)
+    assert _released(provider)
+    [record] = provider.meter.drain()
+    assert record.estimated is True  # the request reached Google: book the worst case
+
+
+def test_unexpected_transport_error_does_not_leak_the_reservation() -> None:
+    provider = _provider(Transport(ValueError("weird")))
+    with pytest.raises(LLMError):
+        provider.complete_json("s", "u", SCHEMA)
+    assert _released(provider)
+
+
+def test_request_that_was_never_sent_is_not_charged() -> None:
+    transport = Transport(RequestNotSent("dns failure"), _ok())
+    provider = _provider(transport)
+    provider.complete_json("s", "u", SCHEMA)
+    [record] = provider.meter.drain()  # only the successful call
+    assert record.estimated is False
+    assert _released(provider)
+
+
+def test_offline_costs_nothing() -> None:
+    provider = _provider(Transport(*[RequestNotSent("offline")] * 4))
+    with pytest.raises(LLMError, match="not sent"):
+        provider.complete_json("s", "u", SCHEMA)
+    assert provider.meter.spent_usd == 0
+    assert provider.meter.drain() == []
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        (200, {}, {"promptFeedback": {"blockReason": "SAFETY"}}),
+        (200, {}, {"candidates": [{"finishReason": "MAX_TOKENS"}]}),
+        (400, {}, {"error": {"message": "bad request"}}),
+    ],
+)
+def test_failures_that_would_repeat_are_permanent(response: tuple) -> None:
+    provider = _provider(Transport(response))
+    with pytest.raises(PermanentLLMError):
+        provider.complete_json("s", "u", SCHEMA)
+
+
+def test_urllib_transport_tells_unsent_from_lost(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refused(*args: Any, **kwargs: Any) -> Any:
+        raise urllib.error.URLError(ConnectionRefusedError("refused"))
+
+    monkeypatch.setattr(urllib.request, "urlopen", refused)
+    with pytest.raises(RequestNotSent):
+        urllib_transport("https://x.invalid", {}, b"{}", 1.0)
+
+    def cut(*args: Any, **kwargs: Any) -> Any:
+        raise http.client.IncompleteRead(b"partial")
+
+    monkeypatch.setattr(urllib.request, "urlopen", cut)
+    with pytest.raises(OSError) as exc:
+        urllib_transport("https://x.invalid", {}, b"{}", 1.0)
+    assert not isinstance(exc.value, RequestNotSent)  # sent, answer lost: may be billed
+
+
+def test_schema_keeps_a_property_called_title() -> None:
+    schema = {
+        "type": "object",
+        "title": "Model",
+        "properties": {"title": {"type": "string", "title": "Title"}},
+        "required": ["title"],
+    }
+    assert gemini_schema(schema) == {
+        "type": "object",
+        "properties": {"title": {"type": "string"}},
+        "required": ["title"],
+    }
+
+
+def test_reset_clears_reservations_and_returns_unsaved_records() -> None:
+    meter = SpendingMeter(limit_usd=1.0)
+    meter.reserve(0.5)  # left behind by a crashed run
+    meter.settle(0.0, model="m", cost_usd=0.1)  # booked but never saved
+    leftover = meter.reset_spent(0.3)
+    assert [r.cost_usd for r in leftover] == [0.1]
+    assert meter.remaining_usd == pytest.approx(0.7)

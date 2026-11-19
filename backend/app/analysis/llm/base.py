@@ -7,6 +7,11 @@ class LLMError(Exception):
     """Provider-level failure (network, quota, refusal). The caller records it, never crashes."""
 
 
+class PermanentLLMError(LLMError):
+    """A failure that the same request would repeat (bad request, blocked or truncated answer,
+    no budget). The caller must not retry it."""
+
+
 class LLMProvider(Protocol):
     name: str
     model: str

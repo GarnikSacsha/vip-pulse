@@ -16,10 +16,17 @@ from app.db import init_db, make_engine, session_scope
 from app.ingestion.adapters import get_adapter
 from app.ingestion.pipeline import IngestBundle, ingest
 from app.ingestion.store import save_bundle
-from app.models import AnalysisRow, AuditRow, LLMCallRow, TaskRow
+from app.models import AnalysisRow, AuditRow, LLMCallRow, RunLeaseRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.schemas.domain import Message, SenderRole
-from app.tasks.service import InvalidTransition, TaskStatus, change_status, run_triage
+from app.tasks import service
+from app.tasks.service import (
+    InvalidTransition,
+    RunInProgress,
+    TaskStatus,
+    change_status,
+    run_triage,
+)
 
 CFG = PolicyConfig.load()
 NOW = datetime(2026, 11, 19, 9, 0, tzinfo=UTC)
@@ -291,3 +298,56 @@ def test_cached_conversations_are_not_sent_to_the_pool(loaded: Session) -> None:
     summary = run_triage(loaded, provider, CFG, now=NOW, workers=4)
     assert provider.calls == 0
     assert summary.reused == 9
+
+
+# --- review fixes: durable ledger, cross-process lease, cancellation ------------------------
+
+
+def test_spend_survives_a_crash_later_in_the_run(
+    loaded: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("bug after analysis")
+
+    monkeypatch.setattr(service, "_apply", boom)
+    with pytest.raises(RuntimeError):
+        run_triage(loaded, MeteredProvider(limit_usd=5.0), CFG, now=NOW)
+    loaded.rollback()
+    assert len(loaded.scalars(select(LLMCallRow)).all()) == 9
+    assert service.ledger_spent(loaded) == pytest.approx(0.90)
+
+
+def test_run_held_by_another_process_is_rejected(loaded: Session) -> None:
+    loaded.add(RunLeaseRow(id=1, holder="pid-other", started_at=datetime.now(UTC)))
+    loaded.commit()
+    with pytest.raises(RunInProgress):
+        run_triage(loaded, FakeProvider(), CFG, now=NOW)
+
+
+def test_stale_lease_of_a_dead_process_is_taken_over(loaded: Session) -> None:
+    started = datetime.now(UTC) - timedelta(hours=2)
+    loaded.add(RunLeaseRow(id=1, holder="pid-dead", started_at=started))
+    loaded.commit()
+    assert run_triage(loaded, FakeProvider(), CFG, now=NOW).analysed == 9
+    assert loaded.scalars(select(RunLeaseRow)).all() == []  # released after the run
+
+
+def test_error_during_parallel_stage_cancels_queued_calls(
+    loaded: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(self: Any, conv: Any, outcome: Any) -> Any:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(service._CachingAnalyzer, "_store", boom)
+    provider = SlowProvider()
+    with pytest.raises(KeyboardInterrupt):
+        run_triage(loaded, provider, CFG, now=NOW, workers=1)
+    assert provider.calls <= 2
+
+
+def test_unsaved_spend_of_an_earlier_crash_is_saved_next_run(loaded: Session) -> None:
+    provider = MeteredProvider(limit_usd=5.0)
+    provider.meter.settle(0.0, model="metered:test", cost_usd=0.20)  # booked, never saved
+    summary = run_triage(loaded, provider, CFG, now=NOW)
+    assert service.ledger_spent(loaded) == pytest.approx(1.10)
+    assert summary.spent_usd == pytest.approx(0.90)

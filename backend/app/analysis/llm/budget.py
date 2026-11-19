@@ -10,10 +10,10 @@ import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from app.analysis.llm.base import LLMError
+from app.analysis.llm.base import PermanentLLMError
 
 
-class BudgetExceeded(LLMError):
+class BudgetExceeded(PermanentLLMError):
     """The next call could exceed the spending limit, so it was not sent."""
 
 
@@ -62,10 +62,17 @@ class SpendingMeter:
         with self._lock:
             return max(0.0, self.limit_usd - self._spent - self._reserved)
 
-    def reset_spent(self, spent_usd: float) -> None:
-        """Start a run from the persisted total (spend of earlier runs and processes)."""
+    def reset_spent(self, spent_usd: float) -> list[CallRecord]:
+        """Start a run from the persisted total (spend of earlier runs and processes).
+
+        Call only when no request is in flight. Reservations left by a crashed run are dropped;
+        calls it booked but never saved are returned so the caller can save them.
+        """
         with self._lock:
             self._spent = spent_usd
+            self._reserved = 0.0
+            records, self._records = self._records, []
+            return records
 
     def reserve(self, max_cost_usd: float) -> None:
         with self._lock:

@@ -32,12 +32,20 @@ decision.
   token + the maximum output). If the reservation does not fit, the call is not sent; the
   conversation fails as `BudgetExceeded` and goes to human review. With parallel calls, all
   in-flight reservations count, so the cap holds.
-- Real cost comes from the reported `usageMetadata`. When the response is lost (timeout), the
-  worst case is booked, because the request may still have been billed.
+- Real cost comes from the reported `usageMetadata`. When the response is lost after the
+  request was sent (read timeout, reset, malformed body), the worst case is booked, because the
+  request may still have been billed. A request that never left the machine (DNS, refused
+  connection) costs nothing. Every reservation is settled exactly once.
 - Retries: 429 and 5xx with backoff (`Retry-After` honoured, at most 3 retries); network errors
-  likewise; other 4xx fail at once. Blocked prompts, empty or truncated answers (`MAX_TOKENS`,
-  `SAFETY`) fail closed. The API key is sent in a header and redacted from error text.
-- Up to `LLM_CONCURRENCY` (default 4) parallel calls per run; one run at a time per process.
+  likewise. Failures that the same request would repeat (other 4xx, blocked prompt, empty or
+  truncated answer such as `MAX_TOKENS` or `SAFETY`, no budget) are permanent: fail closed, no
+  retry, so they are not paid for twice. The API key is sent in a header and redacted from errors.
+- The ledger is committed after every analysis, so a crash or Ctrl+C later in the run cannot
+  hide spend. Ctrl+C during the parallel stage cancels queued calls and saves calls in flight.
+- Up to `LLM_CONCURRENCY` (default 4) parallel calls per run. One run at a time per database:
+  a lock inside the process and a lease row (`run_lease`) across processes, so the CLI and the
+  API cannot spend the budget twice. A lease older than 30 minutes is treated as left by a
+  crashed process and taken over.
 
 ## Open point
 

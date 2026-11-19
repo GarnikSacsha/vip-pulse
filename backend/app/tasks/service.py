@@ -6,20 +6,23 @@ updates the decision but never silently closes or reopens work, except when the 
 again after the work item was closed.
 """
 
+import os
+import socket
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.analysis.llm.base import LLMProvider
-from app.analysis.llm.budget import BudgetExceeded, SpendingMeter, meter_of
+from app.analysis.llm.budget import BudgetExceeded, CallRecord, SpendingMeter, meter_of
 from app.analysis.service import analysis_key, analyze_conversation
 from app.ingestion.store import load_conversations, load_players
-from app.models import AnalysisRow, AuditRow, LLMCallRow, TaskRow
+from app.models import AnalysisRow, AuditRow, LLMCallRow, RunLeaseRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.policy.facts import ConversationFacts, compute_facts, dataset_as_of
 from app.schemas.analysis import AnalysisOutcome, LLMAnalysis, Priority, ProcessingStatus
@@ -27,8 +30,10 @@ from app.schemas.domain import Conversation, Player, SenderRole
 from app.triage import TriageItem, triage
 
 SYSTEM_ACTOR = "system"
-# One triage run at a time per process: two parallel runs would double-spend the LLM budget.
+# One triage run at a time: two parallel runs would each spend the whole LLM budget.
+# RUN_LOCK covers threads of this process, the lease row covers other processes (CLI vs API).
 RUN_LOCK = threading.Lock()
+LEASE_TTL = timedelta(minutes=30)
 
 
 class RunInProgress(RuntimeError):
@@ -73,6 +78,22 @@ def ledger_spent(session: Session) -> float:
     """Total paid LLM spend recorded in this database, across all runs."""
     total = session.scalar(select(func.coalesce(func.sum(LLMCallRow.cost_usd), 0.0)))
     return float(total or 0.0)
+
+
+def _save_calls(session: Session, records: list[CallRecord]) -> float:
+    for record in records:
+        session.add(
+            LLMCallRow(
+                at=record.at,
+                model=record.model,
+                input_tokens=record.input_tokens,
+                output_tokens=record.output_tokens,
+                cost_usd=record.cost_usd,
+                estimated=record.estimated,
+                outcome=record.outcome,
+            )
+        )
+    return sum(r.cost_usd for r in records)
 
 
 def _now(now: datetime | None) -> datetime:
@@ -131,7 +152,8 @@ class _CachingAnalyzer:
                 todo.append((conv, player, facts))
         if not todo:
             return
-        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        pool = ThreadPoolExecutor(max_workers=max(1, workers))
+        try:
             futures = {
                 pool.submit(analyze_conversation, self.provider, conv, player, facts): conv
                 for conv, player, facts in todo
@@ -139,6 +161,14 @@ class _CachingAnalyzer:
             for future in as_completed(futures):
                 conv = futures[future]
                 self._fresh[conv.conversation_id] = self._store(conv, future.result())
+        except BaseException:
+            # Ctrl+C or a bug: send nothing more, wait for calls in flight, keep their cost.
+            pool.shutdown(wait=True, cancel_futures=True)
+            self.session.rollback()
+            self._book_usage()
+            self.session.commit()
+            raise
+        pool.shutdown()
 
     def _cached(self, key: str) -> AnalysisRow | None:
         return self.session.scalars(
@@ -149,22 +179,9 @@ class _CachingAnalyzer:
         ).first()
 
     def _book_usage(self) -> None:
-        """Persist billed calls right away, so a crash mid-run cannot hide spend."""
-        if self.meter is None:
-            return
-        for record in self.meter.drain():
-            self.session.add(
-                LLMCallRow(
-                    at=record.at,
-                    model=record.model,
-                    input_tokens=record.input_tokens,
-                    output_tokens=record.output_tokens,
-                    cost_usd=record.cost_usd,
-                    estimated=record.estimated,
-                    outcome=record.outcome,
-                )
-            )
-            self.summary.spent_usd += record.cost_usd
+        """Add billed calls to the session; `_store` commits them with the analysis."""
+        if self.meter is not None:
+            self.summary.spent_usd += _save_calls(self.session, self.meter.drain())
 
     def __call__(
         self, conv: Conversation, player: Player | None, facts: ConversationFacts
@@ -202,7 +219,8 @@ class _CachingAnalyzer:
             created_at=self.at,
         )
         self.session.add(row)
-        self.session.flush()
+        # Commit per analysis: the spend ledger and the cache must survive a crash later on.
+        self.session.commit()
         self.analysis_ids[conv.conversation_id] = row.id
         if outcome.status == ProcessingStatus.OK:
             self.summary.analysed += 1
@@ -284,9 +302,37 @@ def run_triage(
     if not RUN_LOCK.acquire(blocking=False):
         raise RunInProgress("a triage run is already in progress")
     try:
-        return _run(session, provider, cfg, _now(now), workers)
+        holder = _acquire_lease(session)
+        try:
+            return _run(session, provider, cfg, _now(now), workers)
+        finally:
+            _release_lease(session, holder)
     finally:
         RUN_LOCK.release()
+
+
+def _acquire_lease(session: Session) -> str:
+    now = datetime.now(UTC)
+    holder = f"{socket.gethostname()}:{os.getpid()}"[:100]
+    lease = session.get(RunLeaseRow, 1)
+    if lease is not None:
+        if now - lease.started_at < LEASE_TTL:
+            raise RunInProgress(f"a triage run is already in progress ({lease.holder})")
+        session.delete(lease)  # left by a crashed process
+        session.flush()
+    session.add(RunLeaseRow(id=1, holder=holder, started_at=now))
+    try:
+        session.commit()
+    except IntegrityError as exc:  # another process took it between our read and write
+        session.rollback()
+        raise RunInProgress("a triage run is already in progress") from exc
+    return holder
+
+
+def _release_lease(session: Session, holder: str) -> None:
+    session.rollback()  # drop whatever a failed run left pending; committed work stays
+    session.execute(delete(RunLeaseRow).where(RunLeaseRow.holder == holder))
+    session.commit()
 
 
 def _run(
@@ -296,7 +342,11 @@ def _run(
     meter = meter_of(provider)
     if meter is not None:
         # The cap covers every run recorded in the database, not just this process.
-        meter.reset_spent(ledger_spent(session))
+        leftover = meter.reset_spent(ledger_spent(session))
+        if leftover:  # booked by a run that crashed before saving: real spend, keep it
+            _save_calls(session, leftover)
+            session.commit()
+            meter.reset_spent(ledger_spent(session))
     conversations = load_conversations(session)
     if conversations:
         players = load_players(session)
