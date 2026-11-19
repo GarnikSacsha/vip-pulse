@@ -7,7 +7,7 @@ from app.policy.facts import ConversationFacts
 from app.schemas.analysis import LLMAnalysis
 from app.schemas.domain import Conversation, Player
 
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v3"
 
 SYSTEM_PROMPT = """\
 Ты — аналитик качества VIP-отдела онлайн-казино. Разбираешь переписку VIP-менеджера с игроком
@@ -56,12 +56,12 @@ def build_user_prompt(conv: Conversation, player: Player | None, facts: Conversa
         parts = [f"segment={player.segment}" if player.segment else None]
         parts += [f"{k}={v}" for k, v in sorted(player.attributes.items())]
         profile = _as_data(", ".join(p for p in parts if p)) or "нет данных"
-    wait = f"{facts.wait_hours:g} ч" if facts.wait_hours is not None else "никто не ждёт"
+    # Only time-independent facts go to the model: wait time depends on the reference "now"
+    # and would change the cache key of every conversation whenever new data arrives.
     return (
         f"Канал: {conv.channel.value}\n"
         f"Профиль игрока: {profile}\n"
-        f"Факты (посчитаны кодом): последнее сообщение от {facts.last_sender.value}; "
-        f"ожидание ответа: {wait}\n\n"
+        f"Факт (посчитан кодом): последнее сообщение от {facts.last_sender.value}\n\n"
         f"Переписка:\n<conversation>\n{render_conversation(conv)}\n</conversation>\n"
     )
 

@@ -1,10 +1,10 @@
 """End-to-end triage of a set of conversations: facts -> analysis -> policy -> sorted queue.
 
-Synchronous and sequential for now; batching, caching and persistence of
-analyses arrive in stage 2. Reused by the CLI today and by the API later.
+Pure and synchronous: it does not touch the database. `app.tasks.service.run_triage` wraps it
+with an analyzer that caches provider answers and persists the decisions.
 """
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
@@ -17,6 +17,8 @@ from app.policy.priority import PriorityDecision, decide
 from app.policy.safety import detect_safety
 from app.schemas.analysis import AnalysisOutcome
 from app.schemas.domain import Conversation, Player
+
+Analyzer = Callable[[Conversation, Player | None, ConversationFacts], AnalysisOutcome]
 
 
 class TriageItem(BaseModel):
@@ -35,6 +37,7 @@ def triage(
     provider: LLMProvider,
     cfg: PolicyConfig,
     as_of: datetime | None = None,
+    analyzer: Analyzer | None = None,
 ) -> list[TriageItem]:
     convs = list(conversations)
     if not convs:
@@ -46,7 +49,10 @@ def triage(
     for conv in convs:
         player = by_id.get(conv.player_id)
         facts = compute_facts(conv, as_of, cfg.sla)
-        outcome = analyze_conversation(provider, conv, player, facts)
+        if analyzer is None:
+            outcome = analyze_conversation(provider, conv, player, facts)
+        else:
+            outcome = analyzer(conv, player, facts)
         decision = decide(
             facts, outcome.result, detect_safety(conv, cfg), cfg, simulated=outcome.simulated
         )

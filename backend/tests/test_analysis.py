@@ -1,6 +1,6 @@
 import json
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
 import pytest
@@ -233,3 +233,13 @@ def test_conversation_is_fenced_as_untrusted_data() -> None:
     assert prompt.count("</conversation>") == 1  # the player cannot close the fence early
     assert prompt.index("[m1]") > prompt.index("<conversation>")
     assert prompt.index("[m1]") < prompt.index("</conversation>")
+
+
+def test_cache_key_does_not_depend_on_reference_time() -> None:
+    from app.analysis.service import analysis_key
+
+    p = FakeProvider()
+    early = compute_facts(_conv(), T0, CFG.sla)
+    late = compute_facts(_conv(), T0 + timedelta(days=3), CFG.sla)
+    # Wait time is a code fact; a later "now" must not force a new (paid) analysis.
+    assert analysis_key(p, _conv(), None, early) == analysis_key(p, _conv(), None, late)
