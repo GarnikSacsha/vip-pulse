@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VIP Pulse — шрифты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=Geist:wght@400..700&family=Onest:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap&subset=cyrillic" rel="stylesheet">
+<style>
+  /* Mockup of the light product UI: fixed app colours inside the window on purpose. */
+  .mock {
+    --canvas:#f7f7f8; --surface:#fff; --ink:#17181c; --muted:#6b6f7b; --line:#e6e7ea; --chip:#eff0f2;
+    --p0:#c2410c; --p0s:#fff1e8; --p1:#b45309; --p1s:#fff8e6; --p2:#1d4ed8; --p2s:#eef3ff;
+    --ev:#4f46e5; --evs:#f1f0ff; --ok:#067647;
+    --ui: "Inter", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+    font-family: var(--ui);
+    font-optical-sizing: auto;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .mock[data-font="geist"] { --ui: "Geist", sans-serif; }
+  .mock[data-font="onest"] { --ui: "Onest", sans-serif; }
+
+  .switch { display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; align-items:center; font-family: var(--font-sans); }
+  .switch span { font-size:13px; color: var(--muted-foreground); margin-right:4px; }
+  .switch button {
+    font: inherit; font-size:13px; padding:5px 12px; border-radius: 999px; cursor:pointer;
+    border:1px solid var(--border); background: transparent; color: var(--foreground);
+  }
+  .switch button[aria-pressed="true"] { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+
+  .window { background: var(--canvas); border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.12); }
+  .top { display:flex; align-items:baseline; gap:14px; padding:10px 14px; background:var(--surface); border-bottom:1px solid var(--line); }
+  .brand { font-weight:600; font-size:14px; letter-spacing:-.01em; }
+  .nav { display:flex; gap:2px; font-size:12.5px; }
+  .nav a { padding:3px 8px; border-radius:6px; color:var(--muted); }
+  .nav a.on { background:var(--chip); color:var(--ink); }
+  .asof { margin-left:auto; font-size:11.5px; color:var(--muted); }
+
+  .panes { display:grid; grid-template-columns: 38% 34% 28%; min-height: 430px; }
+  .pane { min-width:0; border-right:1px solid var(--line); }
+  .pane:last-child { border-right:0; }
+  .ph { padding:12px 12px 8px; }
+  .ph h2 { margin:0; font-size:17px; font-weight:600; letter-spacing:-.02em; }
+  .ph p { margin:2px 0 0; font-size:11.5px; color:var(--muted); }
+
+  .q { list-style:none; margin:0; padding:0; }
+  .q li { display:grid; grid-template-columns: 22px 1fr auto; gap:8px; align-items:center; padding:9px 12px; border-top:1px solid var(--line); cursor:pointer; position:relative; }
+  .q li.sel { background:var(--surface); }
+  .q li.sel::before { content:""; position:absolute; left:0; top:0; bottom:0; width:2px; background:var(--ink); }
+  .name { font-size:13px; font-weight:550; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sub { font-size:11.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .wait { white-space:nowrap; font-size:12px; font-variant-numeric: tabular-nums; text-align:right; }
+  .wait small { display:block; font-size:10.5px; color:var(--muted); }
+  .tag { display:inline-block; font-size:10px; font-weight:600; padding:1px 5px; border-radius:4px; margin-right:4px; vertical-align:1px; }
+  .t0 { color:var(--p0); background:var(--p0s); } .t1 { color:var(--p1); background:var(--p1s); } .t2 { color:var(--p2); background:var(--p2s); }
+
+  /* Pulse ring: fill = share of SLA used */
+  .ring { width:20px; height:20px; transform: rotate(-90deg); }
+  .ring circle { fill:none; stroke-width:3; }
+  .ring .bg { stroke: var(--line); }
+  .beat { animation: beat 1.6s ease-in-out infinite; transform-origin:center; }
+  @keyframes beat { 0%,100% { opacity:1; } 50% { opacity:.45; } }
+  @media (prefers-reduced-motion: reduce) { .beat { animation:none; } }
+
+  .tl { padding:4px 12px 12px; display:flex; flex-direction:column; gap:8px; }
+  .msg { font-size:12.5px; line-height:1.45; padding:7px 9px; border-radius:8px; background:var(--surface); box-shadow: 0 0 0 1px var(--line); max-width:92%; transition: box-shadow .15s, background .15s; }
+  .msg.mgr { align-self:flex-end; background:var(--chip); box-shadow:none; }
+  .msg .meta { display:flex; gap:6px; font-size:10.5px; color:var(--muted); margin-bottom:2px; }
+  .msg .id { font-family: var(--mono); font-size:10px; }
+  .msg.hl { background: var(--evs); box-shadow: 0 0 0 1.5px var(--ev); }
+
+  .card { margin: 0 12px 12px; padding:11px 12px; background:var(--surface); border-radius:10px; box-shadow:0 0 0 1px var(--line); }
+  .card + .card { margin-top: -2px; }
+  .lbl { font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:3px; font-weight:500; }
+  .val { font-size:13px; line-height:1.45; margin-bottom:9px; }
+  .val:last-child { margin-bottom:0; }
+  .pill { font-family: var(--mono); font-size:10px; font-weight:500; color:var(--ev); background:var(--evs); border:0; border-radius:4px; padding:1px 4px; margin-left:2px; cursor:pointer; vertical-align:1px; }
+  .pill.hl, .pill:focus-visible { background:var(--ev); color:#fff; outline:none; }
+  .big { font-size:22px; font-weight:600; letter-spacing:-.02em; font-variant-numeric: tabular-nums; color: var(--p0); }
+
+  .spec { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; margin-top:14px; }
+  .sp { background: var(--canvas); color:var(--ink); border-radius: 12px; padding:16px; box-shadow: 0 0 0 1px rgba(0,0,0,.06); }
+  .sp .fn { font-family: var(--mono); font-size:10.5px; color:var(--muted); margin-bottom:8px; }
+  .sp h3 { margin:0 0 6px; font-size:22px; font-weight:600; letter-spacing:-.025em; line-height:1.15; }
+  .sp p { margin:0 0 8px; font-size:13px; line-height:1.5; }
+  .sp .num { font-size:13px; font-variant-numeric: tabular-nums; }
+  .sp .num b { font-weight:600; }
+
+  @media (max-width: 640px) {
+    .panes { grid-template-columns: 1fr; }
+    .pane { border-right:0; border-bottom:1px solid var(--line); }
+    .spec { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="switch" role="group" aria-label="Шрифт">
+  <span>Шрифт:</span>
+  <button data-f="inter" aria-pressed="true">Inter</button>
+  <button data-f="geist" aria-pressed="false">Geist</button>
+  <button data-f="onest" aria-pressed="false">Onest</button>
+</div>
+
+<div class="mock" id="mock" data-font="inter">
+  <div class="window">
+    <div class="top">
+      <span class="brand">VIP Pulse</span>
+      <nav class="nav"><a class="on">Очередь</a><a>Команда</a></nav>
+      <span class="asof">Данные на 19.11, 14:30</span>
+    </div>
+    <div class="panes">
+      <!-- Queue -->
+      <section class="pane">
+        <div class="ph"><h2>Очередь</h2><p>7 ждут ответа · 2 нарушают SLA</p></div>
+        <ul class="q">
+          <li class="sel">
+            <svg class="ring beat" viewBox="0 0 20 20"><circle class="bg" cx="10" cy="10" r="8"/><circle cx="10" cy="10" r="8" stroke="#c2410c" stroke-dasharray="50.3 50.3"/></svg>
+            <div><div class="name"><span class="tag t0">P0</span>Артём Белов</div><div class="sub">Вывод средств · раздражён</div></div>
+            <div class="wait">4 ч 12 м<small>SLA 2 ч</small></div>
+          </li>
+          <li>
+            <svg class="ring beat" viewBox="0 0 20 20"><circle class="bg" cx="10" cy="10" r="8"/><circle cx="10" cy="10" r="8" stroke="#b45309" stroke-dasharray="43 50.3"/></svg>
+            <div><div class="name"><span class="tag t1">P1</span>Марина Осипова</div><div class="sub">Бонус не начислен</div></div>
+            <div class="wait">1 ч 45 м<small>SLA 2 ч</small></div>
+          </li>
+          <li>
+            <svg class="ring" viewBox="0 0 20 20"><circle class="bg" cx="10" cy="10" r="8"/><circle cx="10" cy="10" r="8" stroke="#1d4ed8" stroke-dasharray="20 50.3"/></svg>
+            <div><div class="name"><span class="tag t2">P2</span>Игорь Руденко</div><div class="sub">Вопрос по лимитам</div></div>
+            <div class="wait">48 м<small>SLA 2 ч</small></div>
+          </li>
+          <li>
+            <svg class="ring" viewBox="0 0 20 20"><circle class="bg" cx="10" cy="10" r="8"/><circle cx="10" cy="10" r="8" stroke="#1d4ed8" stroke-dasharray="9 50.3"/></svg>
+            <div><div class="name"><span class="tag t2">P2</span>Ольга Ким</div><div class="sub">Поздравление с ДР</div></div>
+            <div class="wait">22 м<small>SLA 2 ч</small></div>
+          </li>
+          <li>
+            <svg class="ring" viewBox="0 0 20 20"><circle class="bg" cx="10" cy="10" r="8"/></svg>
+            <div><div class="name" style="color:var(--muted)">Сергей Лаптев</div><div class="sub">Ответ отправлен</div></div>
+            <div class="wait" style="color:var(--ok)">✓</div>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Timeline -->
+      <section class="pane">
+        <div class="ph"><h2>Артём Белов</h2><p>VIP Gold · менеджер Анна С.</p></div>
+        <div class="tl">
+          <div class="msg" data-id="m41"><div class="meta"><span>игрок · 10:02</span><span class="id">#41</span></div>Подал заявку на вывод ещё в пятницу, до сих пор в обработке. Что происходит?</div>
+          <div class="msg mgr" data-id="m42"><div class="meta"><span>менеджер · 10:15</span><span class="id">#42</span></div>Уточню у финансового отдела и вернусь.</div>
+          <div class="msg" data-id="m43"><div class="meta"><span>игрок · 11:30</span><span class="id">#43</span></div>Прошло больше часа. Если сегодня не решится, закрываю аккаунт.</div>
+          <div class="msg" data-id="m44"><div class="meta"><span>игрок · 12:18</span><span class="id">#44</span></div>Ау?</div>
+        </div>
+      </section>
+
+      <!-- Analysis -->
+      <section class="pane">
+        <div class="ph"><h2>Разбор</h2><p>Gemini · 19.11, 14:28</p></div>
+        <div class="card">
+          <div class="lbl">Ждёт ответа</div>
+          <div class="big">4 ч 12 м</div>
+        </div>
+        <div class="card">
+          <div class="lbl">Почему</div>
+          <div class="val">Задержка вывода <button class="pill" data-ref="m41">41</button>, угроза уйти <button class="pill" data-ref="m43">43</button>, обещание менеджера не выполнено <button class="pill" data-ref="m42">42</button></div>
+          <div class="lbl">Следующий шаг</div>
+          <div class="val">Сообщить статус заявки и конкретный срок. Бонусы не предлагать до решения вопроса.</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+<div class="spec">
+  <div class="sp" style="font-family:'Inter';font-optical-sizing:auto">
+    <div class="fn">Inter · Linear</div>
+    <h3>Что требует ответа прямо сейчас</h3>
+    <p>Игрок ждёт статус вывода. Съешь же ещё этих мягких французских булок.</p>
+    <div class="num"><b>4 ч 12 м</b> · 1 248 900 ₽ · 0123456789</div>
+  </div>
+  <div class="sp" style="font-family:'Geist'">
+    <div class="fn">Geist · Vercel</div>
+    <h3>Что требует ответа прямо сейчас</h3>
+    <p>Игрок ждёт статус вывода. Съешь же ещё этих мягких французских булок.</p>
+    <div class="num"><b>4 ч 12 м</b> · 1 248 900 ₽ · 0123456789</div>
+  </div>
+  <div class="sp" style="font-family:'Onest'">
+    <div class="fn">Onest · кириллица в основе</div>
+    <h3>Что требует ответа прямо сейчас</h3>
+    <p>Игрок ждёт статус вывода. Съешь же ещё этих мягких французских булок.</p>
+    <div class="num"><b>4 ч 12 м</b> · 1 248 900 ₽ · 0123456789</div>
+  </div>
+</div>
+</div>
+
+<script>
+  const mock = document.getElementById("mock");
+  document.querySelectorAll(".switch button").forEach((b) => {
+    b.addEventListener("click", () => {
+      mock.dataset.font = b.dataset.f;
+      document.querySelectorAll(".switch button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    });
+  });
+  // Two-way evidence highlight: pill <-> message.
+  const set = (id, on) => {
+    document.querySelectorAll(`.msg[data-id="${id}"], .pill[data-ref="${id}"]`).forEach((el) => el.classList.toggle("hl", on));
+  };
+  document.querySelectorAll(".pill").forEach((p) => {
+    ["mouseenter", "focus"].forEach((e) => p.addEventListener(e, () => set(p.dataset.ref, true)));
+    ["mouseleave", "blur"].forEach((e) => p.addEventListener(e, () => set(p.dataset.ref, false)));
+  });
+  document.querySelectorAll(".msg").forEach((m) => {
+    m.addEventListener("mouseenter", () => set(m.dataset.id, true));
+    m.addEventListener("mouseleave", () => set(m.dataset.id, false));
+  });
+</script>
+</body>
+</html>
