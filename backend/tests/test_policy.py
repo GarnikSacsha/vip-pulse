@@ -62,7 +62,7 @@ def action(category: str = "withdrawal", urgency: str = "medium", **kw: object) 
 
 def run(c: Conversation, a: LLMAnalysis | None, as_of_hours: float, cfg: PolicyConfig = CFG):
     facts = compute_facts(c, T0 + timedelta(hours=as_of_hours), cfg.sla)
-    return facts, decide(facts, a, detect_safety(c, cfg), cfg)
+    return facts, decide(facts, a, detect_safety(c, cfg), cfg, simulated=False)
 
 
 # --- facts -------------------------------------------------------------------------------
@@ -236,7 +236,7 @@ def test_thresholds_are_configurable(tmp_path: Path) -> None:
 def test_safety_signal_dominates_any_analysis() -> None:
     facts = compute_facts(conv(("player", 0, "a")), T0, CFG.sla)
     signal = SafetySignal(flag=SafetyFlag.RESPONSIBLE_GAMING, message_ids=("c1-m1",))
-    assert decide(facts, analysis(), signal, CFG).priority is Priority.P0
+    assert decide(facts, analysis(), signal, CFG, simulated=False).priority is Priority.P0
 
 
 # --- sample dataset smoke ----------------------------------------------------------------
@@ -257,7 +257,49 @@ def test_sample_facts_without_llm(sample_conversations) -> None:
 
     d004 = sample_conversations["d-004"]
     signal = detect_safety(d004, CFG)
-    decision = decide(facts["d-004"], None, signal, CFG)
+    decision = decide(facts["d-004"], None, signal, CFG, simulated=False)
     assert decision.priority is Priority.P0
     assert "offer_to_vulnerable_player" in decision.quality_flags
     assert detect_safety(sample_conversations["d-009"], CFG).flag is SafetyFlag.FRAUD_SECURITY
+
+
+# --- provenance of the analysis ------------------------------------------------------------
+
+
+def _reason_texts(simulated: bool) -> list[str]:
+    c = conv(("player", 0, "Где мой вывод?"))
+    facts = compute_facts(c, T0 + timedelta(hours=1), CFG.sla)
+    a = action(needs_escalation=True, confidence=0.3)
+    return [
+        r.text for r in decide(facts, a, detect_safety(c, CFG), CFG, simulated=simulated).reasons
+    ]
+
+
+def test_reasons_from_real_model_are_labelled_ai() -> None:
+    texts = [t for t in _reason_texts(simulated=False) if "(" in t]
+    assert texts and all("AI" in t for t in texts)
+
+
+def test_reasons_from_simulated_analysis_never_say_ai() -> None:
+    texts = _reason_texts(simulated=True)
+    assert not [t for t in texts if "AI" in t]
+    assert any("эвристика" in t for t in texts)
+
+
+def test_simulated_flag_is_required() -> None:
+    facts = compute_facts(conv(("player", 0, "a")), T0, CFG.sla)
+    with pytest.raises(TypeError):
+        decide(facts, None, SafetySignal(), CFG)  # type: ignore[call-arg]
+
+
+def test_safety_reason_from_analysis_is_labelled_but_keyword_reason_is_not() -> None:
+    by_model = conv(("player", 0, "Кто-то поменял мой пароль"))
+    facts = compute_facts(by_model, T0, CFG.sla)
+    a = action(category="account", safety_flag="fraud_security")
+    d = decide(facts, a, detect_safety(by_model, CFG), CFG, simulated=True)
+    assert d.reasons[0].text.endswith("(эвристика fake, без модели)")
+
+    by_keyword = conv(("player", 0, "Это был не я!"))
+    facts = compute_facts(by_keyword, T0, CFG.sla)
+    d = decide(facts, a, detect_safety(by_keyword, CFG), CFG, simulated=True)
+    assert d.reasons[0].text == "Возможный взлом или мошенничество"  # found by code, not a model

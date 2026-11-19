@@ -173,6 +173,19 @@ def test_cli_triage_prints_sorted_queue(tmp_path: Path, sample_paths, capsys) ->
     assert "[offer_to_vulnerable_player]" in "\n".join(lines)
 
 
+def test_cli_triage_never_presents_fake_output_as_ai(tmp_path: Path, sample_paths, capsys) -> None:
+    db_url = f"sqlite:///{(tmp_path / 'label.db').as_posix()}"
+    imp = ["import", "--players", str(sample_paths[0]), "--dialogs", str(sample_paths[1])]
+    assert main([*imp, "--database-url", db_url]) == 0
+    capsys.readouterr()
+
+    assert main(["triage", "--database-url", db_url]) == 0
+    why = [ln for ln in capsys.readouterr().out.splitlines() if ln.strip().startswith("why:")]
+    assert why
+    assert not [ln for ln in why if "AI" in ln], "fake provider output must not be called AI"
+    assert any("эвристика" in ln for ln in why)
+
+
 def test_cli_triage_on_empty_db(tmp_path: Path, capsys) -> None:
     db_url = f"sqlite:///{(tmp_path / 'empty.db').as_posix()}"
     assert main(["triage", "--database-url", db_url]) == 1

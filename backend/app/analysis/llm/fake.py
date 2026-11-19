@@ -45,6 +45,7 @@ def _has(text: str, words: tuple[str, ...]) -> bool:
 class FakeProvider:
     name: ClassVar[str] = "fake"
     model: ClassVar[str] = "heuristic-v1"
+    simulated: ClassVar[bool] = True
 
     def complete_json(self, system: str, user: str, schema: dict[str, Any]) -> str:
         messages = [m.groupdict() for line in user.splitlines() if (m := _LINE.match(line))]

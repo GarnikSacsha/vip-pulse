@@ -83,6 +83,7 @@ def analyze_conversation(
             status=ProcessingStatus.OK,
             result=result,
             model=f"{provider.name}:{provider.model}",
+            simulated=provider.simulated,
             input_hash=key,
         )
     return AnalysisOutcome(
@@ -90,5 +91,6 @@ def analyze_conversation(
         status=ProcessingStatus.FAILED,
         error=error,
         model=f"{provider.name}:{provider.model}",
+        simulated=provider.simulated,
         input_hash=key,
     )

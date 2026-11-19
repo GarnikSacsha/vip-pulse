@@ -99,6 +99,7 @@ class AnalysisOutcome(BaseModel):
     error: str | None = None
     model: str | None = None
     input_hash: str | None = None
+    simulated: bool = False  # produced by a stand-in provider, not a model
 
     @model_validator(mode="after")
     def _status_matches_payload(self) -> "AnalysisOutcome":

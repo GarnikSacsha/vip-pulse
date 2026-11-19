@@ -47,7 +47,9 @@ def triage(
         player = by_id.get(conv.player_id)
         facts = compute_facts(conv, as_of, cfg.sla)
         outcome = analyze_conversation(provider, conv, player, facts)
-        decision = decide(facts, outcome.result, detect_safety(conv, cfg), cfg)
+        decision = decide(
+            facts, outcome.result, detect_safety(conv, cfg), cfg, simulated=outcome.simulated
+        )
         items.append(
             TriageItem(
                 conversation=conv, player=player, facts=facts, analysis=outcome, decision=decision

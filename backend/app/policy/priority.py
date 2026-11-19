@@ -17,7 +17,13 @@ SAFE_FRAUD_ACTION = (
     "Передать в службу безопасности: проверить входы и платежи, при необходимости "
     "заблокировать сессии. Подтвердить игроку, что запрос в работе."
 )
-FALLBACK_ACTION = "AI-разбор недоступен: прочитать переписку вручную и определить следующий шаг."
+FALLBACK_ACTION = (
+    "Автоматический разбор недоступен: прочитать переписку вручную и определить следующий шаг."
+)
+# Shown next to every reason derived from the analysis, so a simulated result is never
+# mistaken for model output.
+LABEL_MODEL = "AI"
+LABEL_SIMULATED = "эвристика fake, без модели"
 
 
 class Route(StrEnum):
@@ -54,7 +60,10 @@ def decide(
     analysis: LLMAnalysis | None,
     safety: SafetySignal,
     cfg: PolicyConfig,
+    *,
+    simulated: bool,
 ) -> PriorityDecision:
+    source = LABEL_SIMULATED if simulated else LABEL_MODEL
     reasons: list[Reason] = []
     quality: list[str] = []
     priority = Priority.P3
@@ -68,14 +77,19 @@ def decide(
 
     # 1. Safety: keyword net OR the LLM, whichever fires. Never downgraded by later rules.
     flag = safety.flag
+    # Keyword hits are facts found by code; a flag that only the analysis raised is labelled.
+    suffix = ""
     if flag == SafetyFlag.NONE and analysis is not None:
         flag = analysis.safety_flag
+        suffix = f" ({source})"
     if flag == SafetyFlag.RESPONSIBLE_GAMING:
         route, review = Route.RG_SPECIALIST, True
-        bump(Priority.P0, "safety.responsible_gaming", "Сигнал ответственной игры у игрока")
+        bump(
+            Priority.P0, "safety.responsible_gaming", f"Сигнал ответственной игры у игрока{suffix}"
+        )
     elif flag == SafetyFlag.FRAUD_SECURITY:
         route, review = Route.SECURITY, True
-        bump(Priority.P0, "safety.fraud_security", "Возможный взлом или мошенничество")
+        bump(Priority.P0, "safety.fraud_security", f"Возможный взлом или мошенничество{suffix}")
     if safety.offer_after_rg_message_ids:
         quality.append("offer_to_vulnerable_player")
         reasons.append(
@@ -91,7 +105,7 @@ def decide(
         reasons.append(
             Reason(
                 code="sla.no_reply_needed",
-                text="Игрок написал последним, но ответа не требуется (оценка AI)",
+                text=f"Игрок написал последним, но ответа не требуется ({source})",
             )
         )
     elif facts.awaiting_reply:
@@ -116,21 +130,23 @@ def decide(
     # 3. Meaning from the LLM, or a conservative fallback when it is unavailable.
     if analysis is None:
         review = True
-        reasons.append(Reason(code="analysis.unavailable", text="AI-разбор не выполнен"))
+        reasons.append(
+            Reason(code="analysis.unavailable", text="Автоматический разбор не выполнен")
+        )
         next_action = FALLBACK_ACTION
     else:
         if analysis.needs_escalation:
-            bump(Priority.P1, "analysis.escalation", "AI рекомендует эскалацию")
+            bump(Priority.P1, "analysis.escalation", f"Рекомендована эскалация ({source})")
         elif analysis.requires_action and analysis.urgency == Urgency.HIGH:
-            bump(Priority.P1, "analysis.high_urgency", "Срочный запрос по оценке AI")
+            bump(Priority.P1, "analysis.high_urgency", f"Срочный запрос ({source})")
         elif analysis.requires_action:
-            bump(Priority.P2, "analysis.requires_action", "Нужно действие менеджера")
+            bump(Priority.P2, "analysis.requires_action", f"Нужно действие менеджера ({source})")
         if analysis.confidence < cfg.analysis.min_confidence:
             review = True
             reasons.append(
                 Reason(
                     code="analysis.low_confidence",
-                    text=f"Низкая уверенность AI ({analysis.confidence:.2f})",
+                    text=f"Низкая уверенность анализа: {analysis.confidence:.2f} ({source})",
                 )
             )
         next_action = analysis.next_action

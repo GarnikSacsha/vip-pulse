@@ -27,6 +27,7 @@ class ScriptedProvider:
 
     name: ClassVar[str] = "scripted"
     model: ClassVar[str] = "test"
+    simulated: ClassVar[bool] = False
 
     def __init__(self, *responses: str | Exception) -> None:
         self._responses: Iterator[str | Exception] = iter(responses)
@@ -186,7 +187,9 @@ def test_sample_pipeline_with_fake_provider(sample_paths) -> None:
         outcome = analyze_conversation(provider, conv, players[conv.player_id], facts)
         assert outcome.status is ProcessingStatus.OK, outcome.error
         assert outcome.result is not None
-        decision = decide(facts, outcome.result, detect_safety(conv, CFG), CFG)
+        decision = decide(
+            facts, outcome.result, detect_safety(conv, CFG), CFG, simulated=outcome.simulated
+        )
         got[conv.conversation_id] = (
             outcome.result.category.value,
             outcome.result.requires_action,
@@ -194,3 +197,12 @@ def test_sample_pipeline_with_fake_provider(sample_paths) -> None:
             decision.route,
         )
     assert got == EXPECTED
+
+
+def test_outcome_records_whether_analysis_was_simulated() -> None:
+    real = _analyze(ScriptedProvider(_valid()))
+    assert real.simulated is False
+    fake = _analyze(FakeProvider())
+    assert fake.simulated is True
+    failed = _analyze(ScriptedProvider("nope", "nope"))
+    assert failed.simulated is False
