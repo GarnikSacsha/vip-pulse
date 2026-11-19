@@ -74,27 +74,33 @@ def load_players(session: Session) -> list[Player]:
     ]
 
 
+def _to_domain(r: ConversationRow) -> Conversation:
+    return Conversation(
+        conversation_id=r.conversation_id,
+        player_id=r.player_id,
+        channel=Channel(r.channel),
+        messages=tuple(
+            Message(
+                message_id=m.message_id,
+                conversation_id=r.conversation_id,
+                sender_role=SenderRole(m.sender_role),
+                sent_at=m.sent_at,
+                text=m.text,
+            )
+            for m in r.messages
+        ),
+    )
+
+
 def load_conversations(session: Session) -> list[Conversation]:
     rows = session.scalars(
         select(ConversationRow)
         .options(selectinload(ConversationRow.messages))
         .order_by(ConversationRow.conversation_id)
     )
-    return [
-        Conversation(
-            conversation_id=r.conversation_id,
-            player_id=r.player_id,
-            channel=Channel(r.channel),
-            messages=tuple(
-                Message(
-                    message_id=m.message_id,
-                    conversation_id=r.conversation_id,
-                    sender_role=SenderRole(m.sender_role),
-                    sent_at=m.sent_at,
-                    text=m.text,
-                )
-                for m in r.messages
-            ),
-        )
-        for r in rows
-    ]
+    return [_to_domain(r) for r in rows]
+
+
+def load_conversation(session: Session, conversation_id: str) -> Conversation | None:
+    row = session.get(ConversationRow, conversation_id)
+    return _to_domain(row) if row is not None else None

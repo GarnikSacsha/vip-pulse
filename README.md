@@ -34,8 +34,8 @@ Copy-Item ..\.env.example .env
 # prioritised work queue
 .\.venv\Scripts\python.exe -m app.cli triage
 
-# API (health check only for now): http://127.0.0.1:8000/docs
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+# API: http://127.0.0.1:8000/docs (queue, conversation detail, meta)
+.\.venv\Scripts\python.exe -m uvicorn app.main:create_app --factory --reload
 ```
 
 macOS / Linux: the same steps with `python3 -m venv .venv` and `.venv/bin/python`.

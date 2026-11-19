@@ -47,7 +47,7 @@ Run from `backend/` in PowerShell (macOS/Linux: `.venv/bin/python`).
 
 ```text
 Install:             py -m venv .venv; .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-Develop (API):       .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+Develop (API):       .\.venv\Scripts\python.exe -m uvicorn app.main:create_app --factory --reload
 Import sample:       .\.venv\Scripts\python.exe -m app.cli import --players ..\data\sample\players.csv --dialogs ..\data\sample\dialogs.json
 Work queue:          .\.venv\Scripts\python.exe -m app.cli triage
 Format/check format: .\.venv\Scripts\python.exe -m ruff format --check .
