@@ -1,10 +1,12 @@
 """Registry of source format adapters."""
 
 from app.ingestion.adapters.sample_v1 import SampleV1Adapter
+from app.ingestion.adapters.task_v1 import TaskV1Adapter
 from app.ingestion.base import SourceAdapter
 
 ADAPTERS: dict[str, type[SourceAdapter]] = {
     SampleV1Adapter.name: SampleV1Adapter,
+    TaskV1Adapter.name: TaskV1Adapter,
 }
 
 

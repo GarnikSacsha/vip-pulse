@@ -1,0 +1,26 @@
+{
+  "generated_for": "unit test fixture, invented",
+  "as_of": "2026-01-10",
+  "dialogs": [
+    {
+      "dialog_id": "X1",
+      "player_id": "T1",
+      "manager": "Ольга",
+      "channel": "telegram",
+      "messages": [
+        {"from": "player", "sent_at": "2026-01-10T09:00:00", "text": "Где мой вывод?"},
+        {"from": "manager", "sent_at": "2026-01-10T09:30:00", "text": "Проверяю."},
+        {"from": "player", "sent_at": "2026-01-10T12:00:00", "text": "Есть новости?"}
+      ]
+    },
+    {
+      "dialog_id": "X2",
+      "player_id": "T2",
+      "manager": "Ben",
+      "channel": "email",
+      "messages": [
+        {"from": "manager", "sent_at": "2026-01-09T10:00:00", "text": "Hi! New tournament this weekend."}
+      ]
+    }
+  ]
+}

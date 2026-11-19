@@ -1,0 +1,3 @@
+player_id,brand,geo,language,status,manager,vip_since,account_status,deposits_30d_usd,deposits_30d_count,deposits_prev_30d_usd,deposits_prev_30d_count,last_deposit_at,failed_deposits_7d,withdrawals_30d_usd,last_withdrawal_at,pending_withdrawal_usd,bonuses_30d_usd,bonuses_30d_count,last_login_at,birthday,favorite_game
+T1,ACME,CIS,ru,VIP,Ольга,2025-01-01,active,1000,5,900,4,2026-01-10,0,0,,0,0,0,2026-01-10,1990-01-01,Demo Slot
+T2,ACME,CA,en,pre-VIP,Ben,2025-02-01,self_excluded,0,0,500,3,2025-12-01,0,0,,0,0,0,2026-01-09,1985-05-05,Demo Roulette
