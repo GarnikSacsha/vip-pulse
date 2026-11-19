@@ -221,3 +221,21 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---- VIP Pulse project-specific ----
+# Real task data (dialogs.json / players.csv) is never committed.
+data/input/*
+!data/input/.gitkeep
+# Local databases and analysis caches
+*.db
+*.sqlite
+*.sqlite3
+.cache/
+# Frontend
+node_modules/
+frontend/dist/
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
