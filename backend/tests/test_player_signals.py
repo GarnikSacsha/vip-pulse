@@ -110,10 +110,13 @@ def test_suggested_offer_is_replaced_for_a_restricted_player() -> None:
 
 def test_failed_deposits_and_pending_withdrawal_raise_priority() -> None:
     conv = _conv((SenderRole.PLAYER, "Не могу пополнить"))
-    d = _decide(conv, _player(failed_deposits_7d="7", pending_withdrawal_usd="12000"))
+    needs_answer = _analysis(
+        requires_action=True, next_action="Помочь", evidence_message_ids=["c-1"]
+    )
+    d = _decide(conv, _player(failed_deposits_7d="7", pending_withdrawal_usd="5000"), needs_answer)
     codes = {r.code: r.text for r in d.reasons}
     assert codes["player.failed_deposits"] == "Неудачных депозитов за 7 дней: 7"
-    assert codes["player.pending_withdrawal"] == "Вывод в ожидании: $12 000"
+    assert codes["player.pending_withdrawal"] == "Вывод в ожидании: $5 000"
     assert d.priority == Priority.P1  # the player waits and money is stuck
 
 
@@ -136,20 +139,22 @@ def test_garbage_numbers_are_ignored_not_raised() -> None:
 
 
 def test_refusing_a_bonus_is_not_an_offer() -> None:
-    conv = _conv((SenderRole.MANAGER, "Давай сегодня без бонусов, лучше сделаем паузу."))
+    conv = _conv((SenderRole.MANAGER, "Сегодня без бонусов, давай отдохнём."))
     d = _decide(conv, _player(account_status="limit_set"))
     assert d.quality_flags == ()
-    conv = _conv((SenderRole.MANAGER, "No bonus today, let's take a break."))
+    conv = _conv((SenderRole.MANAGER, "No bonus this time, take some rest."))
     assert _decide(conv, _player(account_status="limit_set")).quality_flags == ()
 
 
 def test_reload_and_raising_the_limit_count_as_offers() -> None:
-    reload = _conv((SenderRole.MANAGER, "Great weekend reload for you, 50% up to $500!"))
+    reload = _conv((SenderRole.MANAGER, "Special reload for you this Friday!"))
     assert (
         "offer_to_restricted_player"
         in _decide(reload, _player(account_status="limit_set")).quality_flags
     )
-    raise_limit = _conv((SenderRole.MANAGER, "Your deposit limit can be raised anytime."))
+    raise_limit = _conv(
+        (SenderRole.MANAGER, "Just so you know, the limit can be raised on request.")
+    )
     assert (
         "offer_to_restricted_player"
         in _decide(raise_limit, _player(account_status="limit_set")).quality_flags
@@ -162,12 +167,12 @@ def test_reload_and_raising_the_limit_count_as_offers() -> None:
 
 
 def test_setting_a_limit_is_not_an_offer() -> None:
-    conv = _conv((SenderRole.MANAGER, "Могу поставить лимит на депозит, если хочешь."))
+    conv = _conv((SenderRole.MANAGER, "Хочешь, установим дневной лимит?"))
     assert _decide(conv, _player(account_status="limit_set")).quality_flags == ()
 
 
 def test_a_message_that_refuses_bonuses_is_not_an_offer_even_if_it_quotes_the_request() -> None:
-    conv = _conv((SenderRole.MANAGER, "Ты просишь бонусы каждый день. Давай сегодня без бонусов."))
+    conv = _conv((SenderRole.MANAGER, "Ты часто просишь бонусы. Предлагаю неделю без бонусов."))
     assert _decide(conv, _player(account_status="limit_set")).quality_flags == ()
 
 
@@ -187,8 +192,8 @@ def _rg_by_model(evidence: list[str]) -> LLMAnalysis:
 
 def test_offer_after_a_model_raised_rg_signal_is_a_manager_mistake() -> None:
     conv = _conv(
-        (SenderRole.PLAYER, "Слил всё за вечер, я в минусе по уши"),
-        (SenderRole.MANAGER, "Давай дам кешбэк 20%, отыграешь!"),
+        (SenderRole.PLAYER, "Проиграл всё, что было, больше не могу"),
+        (SenderRole.MANAGER, "Начислю кешбэк, вернёшь своё"),
     )
     d = _decide(conv, _player(), _rg_by_model(["c-1"]))
     assert "offer_to_vulnerable_player" in d.quality_flags
@@ -204,9 +209,54 @@ def test_offer_before_the_rg_signal_is_not_flagged() -> None:
 
 
 def test_spelling_variants_of_cashback_count_as_offers() -> None:
-    for text in ("Начислю кешбэк", "Начислю кэшбек", "Отыграешь всё сегодня"):
+    for text in ("Начислю кешбэк", "Начислю кэшбек", "Завтра отыграешь"):
         conv = _conv((SenderRole.MANAGER, text))
         assert (
             "offer_to_restricted_player"
             in _decide(conv, _player(account_status="limit_set")).quality_flags
         ), text
+
+
+# --- review fixes: narrower refusals, model fallback only for model-raised signals --------------
+
+
+def test_negations_that_do_not_refuse_the_offer_still_count() -> None:
+    for text in (
+        "Не пропустите бонус выходного дня!",
+        "Не переживай, кэшбэк придёт завтра",
+        "Нет, бонус уже на счёте",
+        "Not just cashback, a promo code as well",
+        "Начислю кэшбэк. Без бонусов на ставки, правда",
+    ):
+        conv = _conv((SenderRole.MANAGER, text))
+        assert (
+            "offer_to_restricted_player"
+            in _decide(conv, _player(account_status="limit_set")).quality_flags
+        ), text
+
+
+def test_keyword_signal_with_an_earlier_offer_is_not_flagged_via_model_citations() -> None:
+    conv = _conv(
+        (SenderRole.PLAYER, "Привет"),
+        (SenderRole.MANAGER, "Держи фриспины на выходные"),
+        (SenderRole.PLAYER, "Спасибо"),
+        (SenderRole.PLAYER, "Хочу закрыть аккаунт, не могу остановиться"),
+    )
+    d = _decide(conv, _player(), _rg_by_model(["c-1", "c-4"]))
+    assert d.quality_flags == ()
+
+
+def test_model_sourced_offer_flag_is_labelled_with_its_source() -> None:
+    conv = _conv(
+        (SenderRole.PLAYER, "Сегодня всё спустил, грустно"),
+        (SenderRole.MANAGER, "Начислю кешбэк, вернёшь своё"),
+    )
+    d = _decide(conv, _player(), _rg_by_model(["c-1"]))
+    reason = next(r for r in d.reasons if r.code == "quality.offer_to_vulnerable_player")
+    assert reason.text.endswith("(AI)")
+
+
+def test_money_signals_do_not_raise_to_p1_when_nothing_needs_an_answer() -> None:
+    conv = _conv((SenderRole.PLAYER, "Всё пришло, спасибо"))
+    d = _decide(conv, _player(failed_deposits_7d="5"), _analysis(requires_action=False))
+    assert d.priority == Priority.P2

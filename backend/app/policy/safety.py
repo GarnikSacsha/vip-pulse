@@ -18,6 +18,7 @@ class SafetySignal(BaseModel):
     # offers after a signal that only the analysis found.
     manager_offer_ids: tuple[str, ...] = ()
     message_order: tuple[str, ...] = ()
+    player_message_ids: tuple[str, ...] = ()
 
     def offers_after(self, message_ids: tuple[str, ...] | list[str]) -> tuple[str, ...]:
         """Manager offers sent after the earliest of `message_ids`."""
@@ -46,7 +47,12 @@ def detect_safety(conv: Conversation, cfg: PolicyConfig) -> SafetySignal:
                 offer_ids.append(message.message_id)
 
     order = tuple(m.message_id for m in conv.messages)
-    context = {"manager_offer_ids": tuple(manager_offers), "message_order": order}
+    players = tuple(m.message_id for m in conv.messages if m.sender_role == SenderRole.PLAYER)
+    context = {
+        "manager_offer_ids": tuple(manager_offers),
+        "message_order": order,
+        "player_message_ids": players,
+    }
 
     # Responsible gaming outranks fraud: it changes what the manager may say at all.
     if rg_ids:

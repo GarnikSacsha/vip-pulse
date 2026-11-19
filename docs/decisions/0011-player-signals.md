@@ -6,7 +6,7 @@ Date: 2026-11-19. Status: accepted (Denys asked for it after the first run on th
 
 `players.csv` in the task files carries the account status and payment metrics. The first run
 showed what ignoring them costs: offers to a player with a deposit limit were not flagged, and a
-$12 000 withdrawal waiting for payout did not change the priority.
+large withdrawal waiting for payout did not change the priority.
 
 ## Decision
 
@@ -22,14 +22,23 @@ thresholds in `thresholds.yaml` under `player:`. The LLM never sees or decides t
 | deposits < 0.5 × previous 30 days | churn reason, P2 |
 | deposits >= 1.7 × previous 30 days | harm-risk reason, P2, human review |
 
-Offer detection is keyword-based with two refinements found on the task files:
+Offer detection is keyword-based with refinements found on the task files and in review:
 
-- A message that refuses an offer («давай сегодня без бонусов», "no bonus today") is a refusal
-  as a whole, even when it quotes the player's request. A careful manager is not flagged.
+- A refusal right before the offer word («без», «никаких», "no", "without") or a retold request
+  («ты просил …», "you asked for …") is not an offer. Other negations («не пропустите бонус»)
+  are, and one real offer in a message is enough. A careful manager is not flagged.
 - "Reload" and suggestions to raise a limit count as offers.
 
 An offer after a responsible-gaming signal that only the analysis found (no keyword hit) is now
-flagged too, using the messages the analysis cites; offers before the signal are not.
+flagged too: offers after the player messages the analysis cites; offers before them are not.
+That reason carries the analysis source label (AI or demo heuristic).
+
+Known limits (accepted for the MVP):
+
+- The account status is a snapshot at export time and applies to the whole conversation: an offer
+  sent before the limit was set is flagged too. The files have no date of the status change.
+- `self_excluded` replaces a security route: responsible gaming outranks fraud, as in the keyword
+  net. Money signals reach P1 only when the player waits for an answer that is needed.
 
 ## Consequences
 

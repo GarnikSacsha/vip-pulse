@@ -72,24 +72,23 @@ def contains_any(text: str, words: tuple[str, ...]) -> bool:
     return any(word in lowered for word in words)
 
 
-# "без бонусов", "no bonus today", "не предлагаю бонус": a word right before the offer (or one
-# word before it) that negates it. Refusing an offer is not making one.
-_NEGATION = re.compile(r"(?:^|\W)(?:без|не|нет|никаких|no|not|without|never)\W+(?:\w+\W+)?$")
+# A refusal right before the offer word ("без бонусов", "no bonus this time", "никаких
+# кэшбэков") or a retold request ("ты просил бонус", "you asked for a bonus") is not an offer.
+# Other negations ("не пропустите бонус", "нет, бонус уже на счёте") do not refuse anything.
+_REFUSAL = re.compile(r"(?:^|\W)(?:без|никаких|no|without)\W+(?:\w+\W+)?$")
+_RETOLD = re.compile(
+    r"(?:^|\W)(?:просишь|просил|просила|просили|просите|ask|asked|asking)\W+(?:\w+\W+)?$"
+)
 
 
 def mentions_offer(text: str, words: tuple[str, ...]) -> bool:
-    """True when the text offers something from `words`.
-
-    A message that refuses an offer anywhere ("давай сегодня без бонусов") is a refusal as a
-    whole, even when it also quotes the player's request ("ты просишь бонусы").
-    """
+    """True when some mention of `words` in the text is an offer, not a refusal or a retold ask."""
     lowered = text.lower()
-    plain = False
     for word in words:
         start = lowered.find(word)
         while start != -1:
-            if _NEGATION.search(lowered[max(0, start - 30) : start]):
-                return False
-            plain = True
+            before = lowered[max(0, start - 30) : start]
+            if not _REFUSAL.search(before) and not _RETOLD.search(before):
+                return True
             start = lowered.find(word, start + 1)
-    return plain
+    return False

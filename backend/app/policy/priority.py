@@ -119,15 +119,23 @@ def decide(
             )
 
     offers_after_rg = safety.offer_after_rg_message_ids
-    if not offers_after_rg and flag == SafetyFlag.RESPONSIBLE_GAMING and analysis is not None:
-        # The signal came from the analysis: check offers after the messages it cites.
-        offers_after_rg = safety.offers_after(analysis.evidence_message_ids)
+    model_sourced = False
+    if (
+        safety.flag == SafetyFlag.NONE
+        and flag == SafetyFlag.RESPONSIBLE_GAMING
+        and analysis is not None
+    ):
+        # Only the analysis found the signal: offers after the player messages it cites.
+        cited = [m for m in analysis.evidence_message_ids if m in safety.player_message_ids]
+        offers_after_rg = safety.offers_after(cited)
+        model_sourced = bool(offers_after_rg)
     if offers_after_rg:
         quality.append("offer_to_vulnerable_player")
         reasons.append(
             Reason(
                 code="quality.offer_to_vulnerable_player",
-                text="Менеджер предложил бонус игроку с сигналом ответственной игры",
+                text="Менеджер предложил бонус игроку с сигналом ответственной игры"
+                + (f" ({source})" if model_sourced else ""),
             )
         )
 
@@ -161,8 +169,10 @@ def decide(
 
     # 2b. Money problems and trends from the profile (code, not the model).
     if player is not None:
+        # P1 only when the player waits for an answer that is actually needed.
+        answer_needed = facts.awaiting_reply and (analysis is None or analysis.requires_action)
         for reason in player.money_reasons:
-            bump(Priority.P1 if facts.awaiting_reply else Priority.P2, reason.code, reason.text)
+            bump(Priority.P1 if answer_needed else Priority.P2, reason.code, reason.text)
         for reason in player.trend_reasons:
             bump(Priority.P2, reason.code, reason.text)
         review = review or player.needs_review

@@ -157,14 +157,14 @@ CI runs all of them (Python 3.12 and 3.14, Node 24) and blocks commits that cont
 40 conversations, 50 players (`data/input/`, not in Git), analysed by `gemini-3.8-flash` for
 $0.052, 40/40 valid answers.
 
-- **Queue:** 9 × P0, 10 × P1, 4 × P2, 17 × P3; 6 conversations routed to the responsible-gaming
+- **Queue:** 9 × P0, 9 × P1, 5 × P2, 17 × P3; 6 conversations routed to the responsible-gaming
   specialist.
-- **Manager mistakes flagged:** a bonus "to win it back" for a player deep in losses, cashback
-  offered to a player asking to be blocked, a reload and a limit raise offered to a player who set
-  a limit. A manager who refused bonuses and set a limit is not flagged.
+- **Manager mistakes flagged:** a bonus for a player writing about heavy losses, cashback offered
+  to a player asking to be blocked, a deposit bonus and a hint at a higher limit for a player who
+  set a limit. A manager who refused bonuses and set a limit is not flagged.
 - **Found by the model, not by keywords:** a VIP called by the wrong name twice, inaccurate bonus
   terms, a player chasing losses with bonuses.
-- **Missed:** a request for a bonus on the wife's account with the same card (possible
+- **Missed:** a request for a bonus on another account paid with the same card (possible
   multi-accounting) got a low priority. Bonus abuse is not a rule yet.
 
 ## Measuring analysis quality
