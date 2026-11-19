@@ -2,25 +2,44 @@
 
 [![CI](https://github.com/GarnikSacsha/vip-pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/GarnikSacsha/vip-pulse/actions/workflows/ci.yml)
 
-AI-assisted triage of VIP manager ↔ player conversations. It finds unanswered requests and
-service problems, prioritises follow-up and suggests the next step. Every conclusion links to the
-exact source messages, and responsible-gaming cases are routed to a human specialist.
+A work queue for VIP managers, built from their conversations with players. It finds unanswered
+requests and service problems, puts the most urgent first and suggests the next step. Every
+conclusion points to the exact messages it is based on, and responsible-gaming cases go to a
+human specialist.
 
-> **Status: stage 1 of 4.** The backend foundation works end to end from the command line on
-> synthetic data with an offline stand-in for the LLM. The Gemini provider, API and UI come next.
-> See [docs/architecture.md](docs/architecture.md).
+> **Status:** the full path works end to end on synthetic data: import → analysis → prioritised
+> queue in the browser → conversation with evidence → status change with history. Analysis is
+> done by an offline heuristic until Gemini is connected; the UI says so on every screen.
+> See [what is done and what is next](#status).
+
+## Who it is for
+
+| Role | What they get |
+|---|---|
+| **VIP manager** (primary) | "Who do I answer first and what do I say?" A queue sorted by urgency and waiting time, the reason for each priority, a suggested next step, the messages that justify it. |
+| Team lead (next) | Overdue items, escalations, manager mistakes such as offers to vulnerable players. |
+| Head of VIP (next) | Aggregate picture from the same data. |
 
 ## How it decides
 
-- **Facts in code:** who wrote last, how long the player is waiting, SLA breach.
-- **Meaning from the LLM:** category, sentiment, next action, evidence message ids. The output is
-  strictly validated, and an answer citing a message that does not exist is rejected.
+- **Facts in code:** who wrote last, how long the player is waiting, SLA breach, usual response time.
+- **Meaning from the LLM:** category, sentiment, next action and the ids of the messages that
+  support it. The answer is validated against a strict schema; an answer citing a message that does
+  not exist is rejected.
 - **Priority by explicit rules:** P0–P3 with a list of reasons, tunable in
-  [`thresholds.yaml`](backend/app/policy/thresholds.yaml).
+  [`thresholds.yaml`](backend/app/policy/thresholds.yaml) without touching code or prompts.
 - **Safety first:** responsible-gaming and fraud signals are caught even without the LLM. Bonuses
   are never suggested to a vulnerable player, and a manager who offered one is flagged.
+- **The manager owns the status:** re-analysis never closes their work; a closed item reopens only
+  when the player writes again.
+
+Details: [architecture](docs/architecture.md) · [decision records](docs/decisions/).
 
 ## Quick start (Windows PowerShell)
+
+Requirements: Python 3.11+ (`py`), Node 24.
+
+**1. Backend: install, import the synthetic sample, analyse, start the API**
 
 ```powershell
 cd backend
@@ -28,60 +47,106 @@ py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 Copy-Item ..\.env.example .env
 
-# import the synthetic sample (prints a validation report)
 .\.venv\Scripts\python.exe -m app.cli import --players ..\data\sample\players.csv --dialogs ..\data\sample\dialogs.json
-
-# prioritised work queue
 .\.venv\Scripts\python.exe -m app.cli triage
-
-# API (health check only for now): http://127.0.0.1:8000/docs
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+.\.venv\Scripts\python.exe -m uvicorn app.main:create_app --factory --reload
 ```
 
-macOS / Linux: the same steps with `python3 -m venv .venv` and `.venv/bin/python`.
+The API runs on <http://127.0.0.1:8000>, interactive docs at `/docs`.
 
+**2. Frontend: in a second terminal**
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+Open <http://localhost:5173>. Vite proxies `/api` to the backend.
+
+macOS / Linux: the same steps with `python3 -m venv .venv` and `.venv/bin/python`.
 If the console shows broken Cyrillic, run `$env:PYTHONIOENCODING = "utf-8"` first.
 
-Example output (offline `fake` provider):
+### What to look at
+
+1. **Queue:** three P0 items on top. A withdrawal unanswered for 27 h, a possible account
+   takeover routed to security, and a player asking to be blocked who was offered free spins
+   (flagged "Бонус уязвимому игроку").
+2. **Open d-004:** the player's message is marked as the basis of the conclusion, with a red
+   "do not offer bonuses" warning and the route to a responsible-gaming specialist.
+3. **Take an item in progress, then resolve it:** the history records who did what, with the note.
+4. **Change a threshold** in `thresholds.yaml` (for example `critical_wait_hours: 24 → 48`) and run
+   `app.cli triage` again: priorities change, cached analyses are reused, nothing is re-sent to the model.
+
+The CLI prints the same queue the browser shows:
 
 ```
 P0  d-001  p-001   telegram  withdrawal             27h  manager         Проверить статус вывода у платёжной команды…
     why: Финансовый запрос без ответа 27 ч (порог 24 ч); Рекомендована эскалация (эвристика fake, без модели)
 P0  d-004  p-004   telegram  responsible_gaming       -  rg_specialist   Передать специалисту по ответственной игре… [review] [offer_to_vulnerable_player]
     why: Сигнал ответственной игры у игрока; Менеджер предложил бонус игроку с сигналом ответственной игры; …
-P3  d-002  p-002   whatsapp  deposit                22h  manager         -
-    why: Игрок написал последним, но ответа не требуется (эвристика fake, без модели)
 ```
+
+## API
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/meta` | Dataset date, provider with its label, counts by status and priority |
+| GET | `/api/queue?status=&priority=&route=` | Work items, most urgent first |
+| GET | `/api/conversations/{id}` | Messages (evidence and pending marked), analysis, task, reasons, facts |
+| PATCH | `/api/tasks/{id}` | Change status (`open`, `in_progress`, `resolved`) with an optional note |
+| GET | `/api/tasks/{id}/audit` | Status history |
+| POST | `/api/triage/run` | Re-run analysis; unchanged conversations are served from cache |
+| GET | `/health` | Liveness |
 
 ## Checks
 
 ```powershell
+# backend
 cd backend
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
+
+# frontend
+cd frontend
+npm run lint; npm run typecheck; npm test; npm run build
 ```
 
-CI runs the same checks on Python 3.12 and 3.14 and blocks commits that contain `.env` or task data.
+CI runs all of them (Python 3.12 and 3.14, Node 24) and blocks commits that contain `.env` or task data.
 
 ## Project layout
 
 ```
-backend/
-  app/
-    schemas/      Pydantic contracts: domain, taxonomy, strict LLM output
-    ingestion/    format adapters, normalization, dedupe, import report, store
-    policy/       facts, safety net, priority rules, thresholds.yaml
-    analysis/     prompt, LLM providers, validation service
-    triage.py     facts → analysis → policy → sorted queue
-    cli.py        import / triage commands
-  tests/
+backend/app/
+  schemas/      Pydantic contracts: domain model, taxonomy, strict LLM output
+  ingestion/    format adapters, normalization, dedupe, import report, store
+  policy/       facts, safety net, priority rules, thresholds.yaml
+  analysis/     prompt, LLM providers (fake now, Gemini next), validation
+  tasks/        persisted triage, analysis cache, work items, audit
+  api/          FastAPI routers and response models
+  cli.py        import / triage commands
+frontend/src/
+  api/          typed client mirroring backend/app/api/schemas.py
+  pages/        queue, conversation
+  components/   badges and tags
+  lib/          formatting, labels, data loading hook
 data/
-  sample/         synthetic fixture, one edge case per dialog (committed)
-  input/          real task files (git-ignored)
+  sample/       synthetic fixture, one edge case per dialog (committed)
+  input/        real task files (git-ignored)
 docs/
-  architecture.md
+  architecture.md, decisions/
 ```
+
+## Status
+
+| Done | Next |
+|---|---|
+| Import with validation report, dedupe, idempotent re-import | Adapter for the real `dialogs.json` / `players.csv` (awaiting files) |
+| Deterministic facts, SLA, safety net, priority with reasons | Gemini provider behind the existing interface |
+| Strict LLM contract, fail-closed evidence check, prompt-injection fencing | Team lead and head-of-VIP views |
+| Analysis cache, work items, status history | Gold set of hand-labelled conversations to measure quality |
+| Manager queue and conversation view in the browser | One-page brief and demo video |
 
 ## Data and secrets
 

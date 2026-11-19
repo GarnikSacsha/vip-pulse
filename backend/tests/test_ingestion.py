@@ -204,3 +204,15 @@ def test_unreadable_files_are_reported_not_raised(tmp_path: Path, sample_paths) 
     report = ingest(get_adapter("sample_v1"), sample_paths[0], bad_dialogs).report
     assert report.conversations_kept == 0
     assert any("cannot read dialogs file" in i.reason for i in report.errors)
+
+
+def test_cli_triage_persists_and_reuses_analyses(tmp_path: Path, sample_paths, capsys) -> None:
+    db_url = f"sqlite:///{(tmp_path / 'persist.db').as_posix()}"
+    imp = ["import", "--players", str(sample_paths[0]), "--dialogs", str(sample_paths[1])]
+    assert main([*imp, "--database-url", db_url]) == 0
+    capsys.readouterr()
+
+    assert main(["triage", "--database-url", db_url]) == 0
+    assert "analysed 9, reused 0, failed 0" in capsys.readouterr().out
+    assert main(["triage", "--database-url", db_url]) == 0
+    assert "analysed 0, reused 9, failed 0" in capsys.readouterr().out

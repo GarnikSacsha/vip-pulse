@@ -38,6 +38,13 @@ def input_hash(provider: LLMProvider, system: str, user: str) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def analysis_key(
+    provider: LLMProvider, conv: Conversation, player: Player | None, facts: ConversationFacts
+) -> str:
+    """Cache key of the analysis this provider would produce for this conversation."""
+    return input_hash(provider, SYSTEM_PROMPT, build_user_prompt(conv, player, facts))
+
+
 def parse_output(raw: str, conv: Conversation) -> LLMAnalysis:
     text = raw.strip()
     if match := _FENCE.match(text):
@@ -66,7 +73,7 @@ def analyze_conversation(
     max_attempts: int = 2,
 ) -> AnalysisOutcome:
     user = build_user_prompt(conv, player, facts)
-    key = input_hash(provider, SYSTEM_PROMPT, user)
+    key = analysis_key(provider, conv, player, facts)
     error = "not attempted"
     for _ in range(max(1, max_attempts)):
         try:

@@ -1,7 +1,7 @@
 """Command line entrypoint.
 
 python -m app.cli import --players PLAYERS.csv --dialogs DIALOGS.json [--dry-run]
-python -m app.cli triage [--limit N]
+python -m app.cli triage [--limit N]   # analyse, save work items, print the queue
 """
 
 import argparse
@@ -9,14 +9,17 @@ import sys
 from pathlib import Path
 
 from app.analysis.llm import get_provider
+from app.api.queue import list_queue
+from app.api.schemas import QueueItem
 from app.config import get_settings
 from app.db import init_db, make_engine, session_scope
 from app.ingestion.adapters import ADAPTERS, get_adapter
 from app.ingestion.pipeline import ingest
 from app.ingestion.report import ImportReport
-from app.ingestion.store import load_conversations, load_players, save_bundle
+from app.ingestion.store import load_conversations, save_bundle
 from app.policy.config import PolicyConfig
-from app.triage import TriageItem, triage
+from app.policy.facts import dataset_as_of
+from app.tasks.service import run_triage
 
 
 def _print_report(report: ImportReport) -> None:
@@ -55,25 +58,24 @@ def _short(text: str | None, width: int) -> str:
     return text if len(text) <= width else text[: width - 1] + "…"
 
 
-def _print_queue(items: list[TriageItem]) -> None:
+def _print_queue(items: list[QueueItem]) -> None:
     header = (
         f"{'P':3} {'conv':6} {'player':7} {'channel':9} {'category':19} {'wait':>6}  {'route':14}"
     )
     print(header + "  next action")
     print("-" * (len(header) + 40))
     for item in items:
-        d, f = item.decision, item.facts
-        result = item.analysis.result
-        category = result.category.value if result else "(failed)"
-        wait = f"{f.wait_hours:.0f}h" if f.wait_hours is not None else "-"
-        marks = " [review]" if d.requires_human_review else ""
-        marks += "".join(f" [{q}]" for q in d.quality_flags)
+        category = item.category.value if item.category else "(failed)"
+        wait = f"{item.wait_hours:.0f}h" if item.wait_hours is not None else "-"
+        marks = " [review]" if item.requires_review else ""
+        marks += "".join(f" [{q}]" for q in item.quality_flags)
         print(
-            f"{d.priority.value:3} {item.conversation.conversation_id:6} "
-            f"{item.conversation.player_id:7} {item.conversation.channel.value:9} "
-            f"{category:19} {wait:>6}  {d.route.value:14}  {_short(d.next_action, 60)}{marks}"
+            f"{item.priority.value:3} {item.conversation_id:6} "
+            f"{item.player.player_id:7} {item.channel.value:9} "
+            f"{category:19} {wait:>6}  {item.route.value:14}  "
+            f"{_short(item.next_action, 60)}{marks}"
         )
-        print(f"{'':4}why: " + "; ".join(r.text for r in d.reasons))
+        print(f"{'':4}why: " + "; ".join(r.text for r in item.reasons))
 
 
 def cmd_triage(args: argparse.Namespace) -> int:
@@ -81,16 +83,19 @@ def cmd_triage(args: argparse.Namespace) -> int:
     cfg = PolicyConfig.load(args.policy or settings.policy_path)
     engine = make_engine(args.database_url)
     init_db(engine)
-    for session in session_scope(engine):
-        conversations, players = load_conversations(session), load_players(session)
-    if not conversations:
-        print("no conversations in the database; run `import` first", file=sys.stderr)
-        return 1
     provider = get_provider(settings)
-    items = triage(conversations, players, provider, cfg)
-    as_of = items[0].facts.as_of
+    for session in session_scope(engine):
+        if not load_conversations(session):
+            print("no conversations in the database; run `import` first", file=sys.stderr)
+            return 1
+        summary = run_triage(session, provider, cfg)
+        items = list_queue(session)
+        as_of = dataset_as_of(load_conversations(session))
     print(f"as of {as_of:%Y-%m-%d %H:%M} UTC · provider {provider.name}:{provider.model}")
-    print(f"{len(items)} conversations\n")
+    print(
+        f"analysed {summary.analysed}, reused {summary.reused}, failed {summary.failed} · "
+        f"tasks +{summary.created} ~{summary.updated}, reopened {summary.reopened}\n"
+    )
     _print_queue(items[: args.limit] if args.limit else items)
     return 0
 
@@ -107,7 +112,9 @@ def build_parser() -> argparse.ArgumentParser:
     imp.add_argument("--dry-run", action="store_true", help="validate only, do not save")
     imp.set_defaults(func=cmd_import)
 
-    tri = sub.add_parser("triage", help="analyse stored conversations and print the work queue")
+    tri = sub.add_parser(
+        "triage", help="analyse stored conversations, save work items and print the queue"
+    )
     tri.add_argument("--database-url", default=None, help="defaults to DATABASE_URL")
     tri.add_argument("--policy", default=None, help="thresholds YAML, defaults to POLICY_PATH")
     tri.add_argument("--limit", type=int, default=0, help="show only the first N items")
