@@ -7,6 +7,7 @@ import type {
   QueueItem,
   StatusChange,
   TaskOut,
+  WinbackItem,
 } from "./types";
 
 /** Error with the HTTP status and a message that is safe to show to the user. */
@@ -56,4 +57,6 @@ export const api = {
     request<TaskOut>(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(change) }),
   audit: (taskId: number) => request<AuditEvent[]>(`/api/tasks/${taskId}/audit`),
   overview: () => request<Overview>("/api/overview"),
+  winback: (manager?: string | null) =>
+    request<WinbackItem[]>(manager ? `/api/winback?manager=${encodeURIComponent(manager)}` : "/api/winback"),
 };

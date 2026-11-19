@@ -4,11 +4,13 @@ import { formatDateTime } from "./lib/format";
 import { ConversationPane, NoConversation } from "./pages/ConversationPage";
 import { LeadPage } from "./pages/LeadPage";
 import { OverviewPage } from "./pages/OverviewPage";
+import { WinbackPage } from "./pages/WinbackPage";
 import { QueuePage, type ShellContext } from "./pages/QueuePage";
 import { useApi } from "./lib/useApi";
 
 const NAV = [
   { to: "/queue", label: "Очередь", hint: "менеджер" },
+  { to: "/winback", label: "Кого вернуть", hint: "менеджер" },
   { to: "/lead", label: "Команда", hint: "тимлид" },
   { to: "/overview", label: "Обзор", hint: "руководитель VIP" },
 ];
@@ -98,6 +100,7 @@ export function AppRoutes() {
         </Route>
         <Route path="conversations/:id" element={<ToInbox />} />
         <Route element={<Contained />}>
+          <Route path="winback" element={<WinbackPage />} />
           <Route path="lead" element={<LeadPage />} />
           <Route path="overview" element={<OverviewPage />} />
         </Route>

@@ -217,3 +217,21 @@ export interface StatusChange {
   note?: string;
   actor?: string;
 }
+
+// --- win-back (mirrors backend/app/api/schemas.py: WinbackOut) ---
+
+export type WinbackTier = "urgent" | "attention" | "introduce";
+
+export interface WinbackItem {
+  player: Player;
+  tier: WinbackTier;
+  reasons: Reason[];
+  next_action: string;
+  last_login_days: number | null;
+  /** null: the manager never wrote to this player. */
+  last_contact_days: number | null;
+  deposits_30d_usd: number | null;
+  deposits_prev_30d_usd: number | null;
+  favorite_game: string | null;
+  latest_conversation_id: string | null;
+}

@@ -1,0 +1,77 @@
+import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import { describe, expect, it, vi } from "vitest";
+import { AppRoutes } from "../App";
+import type { WinbackItem } from "../api/types";
+import { meta, serveApi } from "../test/fixtures";
+
+function item(overrides: Partial<WinbackItem> = {}): WinbackItem {
+  return {
+    player: { player_id: "p-041", display_name: null, manager_id: "mgr-01", segment: "VIP", country: "CIS" },
+    tier: "urgent",
+    reasons: [
+      { code: "winback.silent", text: "Не заходил 25 дн." },
+      { code: "winback.stopped_depositing", text: "Перестал вносить депозиты: было $18 000 за 30 дней" },
+    ],
+    next_action: "Написать лично: спросить, всё ли в порядке.",
+    last_login_days: 25,
+    last_contact_days: null,
+    deposits_30d_usd: 0,
+    deposits_prev_30d_usd: 18000,
+    favorite_game: "Demo Slot",
+    latest_conversation_id: null,
+    ...overrides,
+  };
+}
+
+const intro = item({
+  player: { player_id: "p-049", display_name: null, manager_id: "mgr-02", segment: "VIP" },
+  tier: "introduce",
+  reasons: [{ code: "winback.no_contact", text: "Менеджер ещё не писал игроку" }],
+  next_action: "Познакомиться: короткое личное сообщение от менеджера, без промо.",
+  last_login_days: 1,
+});
+
+function renderAt(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <AppRoutes />
+    </MemoryRouter>,
+  );
+}
+
+describe("win-back page", () => {
+  it("is in the main navigation", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/winback": [] });
+    renderAt("/winback");
+    expect(screen.getByRole("link", { name: "Кого вернуть" })).toHaveAttribute("href", "/winback");
+    expect(await screen.findByRole("heading", { name: "Кого вернуть" })).toBeInTheDocument();
+  });
+
+  it("groups players by tier with reasons and the next step", async () => {
+    const calls = serveApi(vi, { "/api/meta": meta, "/api/winback": [item(), intro] });
+    renderAt("/winback");
+    const urgent = await screen.findByRole("region", { name: /Вернуть срочно/ });
+    expect(urgent).toHaveTextContent("p-041");
+    expect(urgent).toHaveTextContent("Не заходил 25 дн.");
+    expect(urgent).toHaveTextContent("Написать лично");
+    expect(urgent).toHaveTextContent("Переписок ещё не было");
+    const introduce = screen.getByRole("region", { name: /Познакомиться/ });
+    expect(within(introduce).getByText(/p-049/)).toBeInTheDocument();
+    expect(calls).toContain("/api/winback");
+  });
+
+  it("links to the latest conversation when there is one", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/winback": [item({ latest_conversation_id: "d-013", last_contact_days: 1 })] });
+    renderAt("/winback");
+    const link = await screen.findByRole("link", { name: /Открыть переписку/ });
+    expect(link).toHaveAttribute("href", "/queue/d-013");
+  });
+
+  it("filters by manager from the URL", async () => {
+    const calls = serveApi(vi, { "/api/meta": meta, "/api/winback": [] });
+    renderAt("/winback?manager=mgr-01");
+    expect(await screen.findByText(/Сейчас некого возвращать/)).toBeInTheDocument();
+    expect(calls).toContain("/api/winback?manager=mgr-01");
+  });
+});
