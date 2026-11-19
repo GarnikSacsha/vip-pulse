@@ -235,6 +235,8 @@ data/input/*
 # Frontend
 node_modules/
 frontend/dist/
+# The Python template above ignores any "lib/" directory; the frontend keeps source code there.
+!frontend/src/lib/
 # Editors / OS
 .idea/
 .vscode/
