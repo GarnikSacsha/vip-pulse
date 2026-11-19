@@ -1,0 +1,106 @@
+{
+  "_comment": "Synthetic fixture. Invented players and messages; the format is ours (sample_v1) until the real task files arrive.",
+  "dialogs": [
+    {
+      "dialog_id": "d-001",
+      "player_id": "p-001",
+      "channel": "telegram",
+      "messages": [
+        { "id": "m-001-1", "sender": "player", "timestamp": "2026-11-10T09:00:00Z", "text": "Добрый день! Вывел 5000€ ещё позавчера, до сих пор не пришло. Подскажите, что с выплатой?" },
+        { "id": "m-001-2", "sender": "manager", "timestamp": "2026-11-10T09:20:00Z", "text": "Здравствуйте! Проверю статус вывода и вернусь к вам сегодня." },
+        { "id": "m-001-3", "sender": "player", "timestamp": "2026-11-11T10:00:00Z", "text": "Прошли сутки, ответа нет. Где мои деньги? Если не решите, ухожу на другой сайт." }
+      ]
+    },
+    {
+      "dialog_id": "d-002",
+      "player_id": "p-002",
+      "channel": "wa",
+      "messages": [
+        { "id": "m-002-1", "sender": "client", "timestamp": "2026-11-11T14:00:00Z", "text": "Пополнил счёт на 300€, депозит не зачислился." },
+        { "id": "m-002-2", "sender": "manager", "timestamp": "2026-11-11T14:25:00Z", "text": "Проверил: платёж задержался у провайдера, сейчас зачислили. Проверьте, пожалуйста." },
+        { "id": "m-002-3", "sender": "client", "timestamp": "2026-11-11T14:40:00Z", "text": "Да, всё пришло, спасибо!" }
+      ]
+    },
+    {
+      "dialog_id": "d-003",
+      "player_id": "p-003",
+      "channel": "email",
+      "messages": [
+        { "id": "m-003-1", "sender": "manager", "timestamp": "2026-11-09T08:00:00Z", "text": "С днём рождения! Желаем отличного года." },
+        { "id": "m-003-2", "sender": "player", "timestamp": "2026-11-09T11:30:00Z", "text": "Спасибо большое, очень приятно!" }
+      ]
+    },
+    {
+      "dialog_id": "d-004",
+      "player_id": "p-004",
+      "channel": "telegram",
+      "messages": [
+        { "id": "m-004-1", "sender": "player", "timestamp": "2026-11-11T22:10:00Z", "text": "Я слишком много проигрываю и не могу остановиться. Хочу закрыть аккаунт на полгода, заблокируйте меня, пожалуйста." },
+        { "id": "m-004-2", "sender": "manager", "timestamp": "2026-11-11T22:30:00Z", "text": "Понимаю! Давайте лучше начислю вам 50 фриспинов, чтобы отыграться." }
+      ]
+    },
+    {
+      "dialog_id": "d-005",
+      "player_id": "p-005",
+      "channel": "whatsapp",
+      "messages": [
+        { "id": "m-005-1", "sender": "player", "timestamp": "2026-11-12T06:00:00Z", "text": "Отправил паспорт и выписку для верификации ещё вчера. Когда проверят документы?" },
+        { "id": "m-005-2", "sender": "manager", "timestamp": "2026-11-12T06:40:00Z", "text": "Передал документы в отдел верификации." },
+        { "id": "m-005-3", "sender": "player", "timestamp": "2026-11-12T12:00:00Z", "text": "Есть новости по верификации? Не могу вывести без неё." }
+      ]
+    },
+    {
+      "dialog_id": "d-006",
+      "player_id": "p-006",
+      "channel": "e-mail",
+      "messages": [
+        { "id": "m-006-1", "sender": "player", "timestamp": "2026-11-12T10:00:00Z", "text": "Игра зависает при запуске слотов, приложение вылетает." },
+        { "id": "m-006-1", "sender": "player", "timestamp": "2026-11-12T10:00:00Z", "text": "Игра зависает при запуске слотов, приложение вылетает." },
+        { "id": "m-006-2", "sender": "player", "timestamp": "2026-11-12T10:00:00Z", "text": "Игра зависает при запуске слотов, приложение вылетает." },
+        { "id": "m-006-3", "sender": "agent", "timestamp": "2026-11-12T10:45:00Z", "text": "Очистите кэш и обновите приложение до последней версии. Если не поможет — пришлите скриншот ошибки." }
+      ]
+    },
+    {
+      "dialog_id": "d-007",
+      "player_id": "p-007",
+      "channel": "telegram",
+      "messages": [
+        { "id": "m-007-1", "sender": "player", "timestamp": "2026-11-12T13:00:00Z", "text": "?" }
+      ]
+    },
+    {
+      "dialog_id": "d-008",
+      "player_id": "p-999",
+      "channel": "telegram",
+      "messages": [
+        { "id": "m-008-1", "sender": "player", "timestamp": "2026-11-12T09:00:00Z", "text": "Диалог игрока, которого нет в players.csv." }
+      ]
+    },
+    {
+      "dialog_id": "d-009",
+      "player_id": "p-008",
+      "channel": "email",
+      "messages": [
+        { "id": "m-009-1", "sender": "player", "timestamp": "2026-11-12T07:15:00Z", "text": "Пришло письмо о входе в аккаунт с нового устройства, это был не я. Помогите срочно!" },
+        { "id": "m-009-2", "sender": "player", "timestamp": "yesterday", "text": "Сообщение с битой датой." },
+        { "id": "m-009-3", "sender": "robot", "timestamp": "2026-11-12T07:16:00Z", "text": "Сообщение от неизвестного отправителя." }
+      ]
+    },
+    {
+      "dialog_id": "d-010",
+      "player_id": "p-001",
+      "channel": "email",
+      "messages": [
+        { "id": "m-010-1", "sender": "manager", "timestamp": "2026-11-05T12:00:00Z", "text": "Давно не виделись! Рассказать о новом турнире на выходных?" }
+      ]
+    },
+    {
+      "dialog_id": "d-001",
+      "player_id": "p-001",
+      "channel": "telegram",
+      "messages": [
+        { "id": "m-001-9", "sender": "player", "timestamp": "2026-11-11T11:00:00Z", "text": "Повторный dialog_id — должен быть отклонён." }
+      ]
+    }
+  ]
+}
