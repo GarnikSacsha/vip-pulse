@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     gemini_thinking_budget: int = 0
     # Hard cap on total paid LLM spend, across all runs recorded in the database.
     llm_budget_usd: float = 1.0
+    # Parallel LLM calls per triage run (keep low on the free tier: its rate limit is per minute).
+    llm_concurrency: int = 4
     policy_path: str | None = None
 
 

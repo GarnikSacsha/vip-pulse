@@ -1,6 +1,8 @@
 """Persisted triage: analyses are cached, every conversation gets one work item, and the
 manager's status survives re-runs unless the player writes again."""
 
+import threading
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
@@ -10,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.analysis.llm import FakeProvider, LLMError
 from app.analysis.llm.budget import SpendingMeter
+from app.db import init_db, make_engine, session_scope
 from app.ingestion.adapters import get_adapter
 from app.ingestion.pipeline import IngestBundle, ingest
 from app.ingestion.store import save_bundle
@@ -233,3 +236,58 @@ def test_unmetered_provider_reports_no_budget(loaded: Session) -> None:
         False,
     )
     assert loaded.scalars(select(LLMCallRow)).all() == []
+
+
+# --- bounded concurrency -------------------------------------------------------------------
+
+
+class SlowProvider(FakeProvider):
+    """Records how many calls overlap, to prove parallelism and its upper bound."""
+
+    def __init__(self) -> None:
+        self.in_flight = 0
+        self.max_in_flight = 0
+        self.calls = 0
+        self._lock = threading.Lock()
+
+    def complete_json(self, system: str, user: str, schema: dict[str, Any]) -> str:
+        with self._lock:
+            self.calls += 1
+            self.in_flight += 1
+            self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        time.sleep(0.05)
+        with self._lock:
+            self.in_flight -= 1
+        return super().complete_json(system, user, schema)
+
+
+def test_fresh_analyses_run_in_parallel_up_to_the_limit(loaded: Session) -> None:
+    provider = SlowProvider()
+    summary = run_triage(loaded, provider, CFG, now=NOW, workers=3)
+    assert provider.calls == 9
+    assert 2 <= provider.max_in_flight <= 3
+    assert summary.analysed == 9
+
+
+def test_parallel_run_gives_the_same_queue_as_sequential(
+    session: Session, bundle: IngestBundle, sample_paths
+) -> None:
+    save_bundle(session, bundle)
+    run_triage(session, FakeProvider(), CFG, now=NOW, workers=1)
+    sequential = {c: (t.priority, t.route, t.status) for c, t in _tasks(session).items()}
+
+    engine = make_engine("sqlite://")
+    init_db(engine)
+    for other in session_scope(engine):
+        save_bundle(other, bundle)
+        run_triage(other, SlowProvider(), CFG, now=NOW, workers=4)
+        parallel = {c: (t.priority, t.route, t.status) for c, t in _tasks(other).items()}
+    assert parallel == sequential
+
+
+def test_cached_conversations_are_not_sent_to_the_pool(loaded: Session) -> None:
+    run_triage(loaded, FakeProvider(), CFG, now=NOW)
+    provider = SlowProvider()
+    summary = run_triage(loaded, provider, CFG, now=NOW, workers=4)
+    assert provider.calls == 0
+    assert summary.reused == 9

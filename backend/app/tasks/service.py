@@ -7,6 +7,7 @@ again after the work item was closed.
 """
 
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -20,7 +21,7 @@ from app.analysis.service import analysis_key, analyze_conversation
 from app.ingestion.store import load_conversations, load_players
 from app.models import AnalysisRow, AuditRow, LLMCallRow, TaskRow
 from app.policy.config import PolicyConfig
-from app.policy.facts import ConversationFacts
+from app.policy.facts import ConversationFacts, compute_facts, dataset_as_of
 from app.schemas.analysis import AnalysisOutcome, LLMAnalysis, Priority, ProcessingStatus
 from app.schemas.domain import Conversation, Player, SenderRole
 from app.triage import TriageItem, triage
@@ -108,6 +109,44 @@ class _CachingAnalyzer:
         self.session, self.provider, self.summary, self.at = session, provider, summary, at
         self.meter: SpendingMeter | None = meter_of(provider)
         self.analysis_ids: dict[str, int] = {}
+        self._fresh: dict[str, AnalysisOutcome] = {}
+
+    def prefetch(
+        self,
+        conversations: list[Conversation],
+        players: dict[str, Player],
+        cfg: PolicyConfig,
+        workers: int,
+    ) -> None:
+        """Analyse every conversation without a cached answer, up to `workers` at a time.
+
+        Only provider calls run in threads; the database is touched from this thread alone.
+        """
+        as_of = dataset_as_of(conversations)
+        todo = []
+        for conv in conversations:
+            player = players.get(conv.player_id)
+            facts = compute_facts(conv, as_of, cfg.sla)
+            if self._cached(analysis_key(self.provider, conv, player, facts)) is None:
+                todo.append((conv, player, facts))
+        if not todo:
+            return
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            futures = {
+                pool.submit(analyze_conversation, self.provider, conv, player, facts): conv
+                for conv, player, facts in todo
+            }
+            for future in as_completed(futures):
+                conv = futures[future]
+                self._fresh[conv.conversation_id] = self._store(conv, future.result())
+
+    def _cached(self, key: str) -> AnalysisRow | None:
+        return self.session.scalars(
+            select(AnalysisRow)
+            .where(AnalysisRow.input_hash == key, AnalysisRow.status == ProcessingStatus.OK)
+            .order_by(AnalysisRow.id.desc())
+            .limit(1)
+        ).first()
 
     def _book_usage(self) -> None:
         """Persist billed calls right away, so a crash mid-run cannot hide spend."""
@@ -130,13 +169,10 @@ class _CachingAnalyzer:
     def __call__(
         self, conv: Conversation, player: Player | None, facts: ConversationFacts
     ) -> AnalysisOutcome:
+        if (fresh := self._fresh.pop(conv.conversation_id, None)) is not None:
+            return fresh
         key = analysis_key(self.provider, conv, player, facts)
-        cached = self.session.scalars(
-            select(AnalysisRow)
-            .where(AnalysisRow.input_hash == key, AnalysisRow.status == ProcessingStatus.OK)
-            .order_by(AnalysisRow.id.desc())
-            .limit(1)
-        ).first()
+        cached = self._cached(key)
         if cached is not None:
             self.summary.reused += 1
             self.analysis_ids[conv.conversation_id] = cached.id
@@ -149,13 +185,15 @@ class _CachingAnalyzer:
                 simulated=cached.simulated,
             )
 
-        outcome = analyze_conversation(self.provider, conv, player, facts)
+        return self._store(conv, analyze_conversation(self.provider, conv, player, facts))
+
+    def _store(self, conv: Conversation, outcome: AnalysisOutcome) -> AnalysisOutcome:
         self._book_usage()
         if (outcome.error or "").startswith(BudgetExceeded.__name__):
             self.summary.budget_exhausted = True
         row = AnalysisRow(
             conversation_id=conv.conversation_id,
-            input_hash=outcome.input_hash or key,
+            input_hash=outcome.input_hash or "",
             status=outcome.status.value,
             model=outcome.model,
             simulated=outcome.simulated,
@@ -240,16 +278,20 @@ def run_triage(
     cfg: PolicyConfig,
     *,
     now: datetime | None = None,
+    workers: int = 1,
 ) -> RunSummary:
+    """`workers` bounds parallel provider calls; cached conversations are never re-sent."""
     if not RUN_LOCK.acquire(blocking=False):
         raise RunInProgress("a triage run is already in progress")
     try:
-        return _run(session, provider, cfg, _now(now))
+        return _run(session, provider, cfg, _now(now), workers)
     finally:
         RUN_LOCK.release()
 
 
-def _run(session: Session, provider: LLMProvider, cfg: PolicyConfig, at: datetime) -> RunSummary:
+def _run(
+    session: Session, provider: LLMProvider, cfg: PolicyConfig, at: datetime, workers: int
+) -> RunSummary:
     summary = RunSummary()
     meter = meter_of(provider)
     if meter is not None:
@@ -257,8 +299,10 @@ def _run(session: Session, provider: LLMProvider, cfg: PolicyConfig, at: datetim
         meter.reset_spent(ledger_spent(session))
     conversations = load_conversations(session)
     if conversations:
+        players = load_players(session)
         analyzer = _CachingAnalyzer(session, provider, summary, at)
-        items = triage(conversations, load_players(session), provider, cfg, analyzer=analyzer)
+        analyzer.prefetch(conversations, {p.player_id: p for p in players}, cfg, workers)
+        items = triage(conversations, players, provider, cfg, analyzer=analyzer)
         for item in items:
             conversation_id = item.conversation.conversation_id
             _apply(session, item, analyzer.analysis_ids.get(conversation_id), summary, at)

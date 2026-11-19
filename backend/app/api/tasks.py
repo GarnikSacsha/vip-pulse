@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.analysis.llm import LLMProvider
 from app.api.deps import get_policy, get_provider, get_session
 from app.api.schemas import ReasonOut, TaskOut
+from app.config import get_settings
 from app.models import AuditRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.tasks.service import (
@@ -107,7 +108,7 @@ def rerun_triage(
 ) -> RunSummaryOut:
     # Cached analyses are reused, so a re-run only calls the provider for changed conversations.
     try:
-        summary = run_triage(session, provider, policy)
+        summary = run_triage(session, provider, policy, workers=get_settings().llm_concurrency)
     except RunInProgress as exc:
         raise HTTPException(status_code=409, detail="triage is already running") from exc
     return RunSummaryOut(**asdict(summary))

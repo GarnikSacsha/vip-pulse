@@ -89,7 +89,7 @@ def cmd_triage(args: argparse.Namespace) -> int:
             print("no conversations in the database; run `import` first", file=sys.stderr)
             return 1
         try:
-            summary = run_triage(session, provider, cfg)
+            summary = run_triage(session, provider, cfg, workers=settings.llm_concurrency)
         except RunInProgress:
             print("a triage run is already in progress", file=sys.stderr)
             return 1
