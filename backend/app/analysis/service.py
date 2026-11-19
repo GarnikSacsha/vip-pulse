@@ -11,7 +11,7 @@ import re
 
 from pydantic import ValidationError
 
-from app.analysis.llm.base import LLMError, LLMProvider
+from app.analysis.llm.base import LLMError, LLMProvider, PermanentLLMError
 from app.analysis.prompts import (
     PROMPT_VERSION,
     SYSTEM_PROMPT,
@@ -79,6 +79,9 @@ def analyze_conversation(
         try:
             raw = provider.complete_json(SYSTEM_PROMPT, user, response_schema())
             result = parse_output(raw, conv)
+        except PermanentLLMError as exc:  # the same request would fail (and be paid) again
+            error = f"{type(exc).__name__}: {exc}"
+            break
         except (LLMError, InvalidOutput) as exc:
             error = f"{type(exc).__name__}: {exc}"
             continue

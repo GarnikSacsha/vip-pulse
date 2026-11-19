@@ -24,7 +24,7 @@ Team lead and head of VIP get thin oversight views over the same data.
 - Language/framework: Python 3.11+ (local: 3.14 via `py`), FastAPI, Pydantic v2, SQLAlchemy 2.
   Frontend: React 19 + TypeScript (strict) + Vite + Tailwind v4, Node 24.
 - Persistence: SQLite file (`DATABASE_URL`), local only.
-- External providers: Gemini (stage 2) behind `app/analysis/llm`; `fake` provider offline.
+- External providers: Gemini (REST, stdlib HTTP) behind `app/analysis/llm`; `fake` provider offline.
 - Approved dependencies: fastapi, uvicorn, pydantic, pydantic-settings, sqlalchemy, pyyaml;
   dev: pytest, httpx2, ruff.
   Frontend (approved 2026-11-19): react, react-dom, react-router; dev: vite,
@@ -98,10 +98,12 @@ system temp directory on the dev machine cannot be cleaned by pytest.
 
 ## Delivery stages
 
-- Stage 1 (backend foundation): PR #1, Draft. Built before the harness was read: tests were
+- Stage 1 (backend foundation): PR #1, merged. Built before the harness was read: tests were
   written after the code, no RED evidence. Corrective commits in the same PR.
-- Stage 2 (next): real-data adapter and data contract, Gemini provider, batch runner, persisted
-  analyses, tasks + audit, REST API. Strict TDD with RED/GREEN evidence recorded in the PR.
+- Stage 2a (browser slice): PR #2, merged. Persisted analyses, tasks + audit, REST API, React UI.
+- Stage 2b: Gemini provider, spending cap, bounded concurrency (branch
+  `feat/stage-2b-gemini-provider`); real-data adapter and data contract wait for the files.
+  Strict TDD with RED/GREEN evidence recorded in the PR.
 - Commit map: written before each stage; one atomic GREEN commit per coherent outcome.
 - Local-commit authorization: granted for agreed stages.
 - Push authorization: granted after each step (Denys, 2026-11-19).
@@ -113,8 +115,10 @@ system temp directory on the dev machine cannot be cleaned by pytest.
 - Excluded from Git: `.env`, `data/input/*`, `*.db`, `*.sqlite*`, caches, `node_modules/`.
   CI job "No secrets or real data" enforces the first two.
 - Data class: task files are fictional but belong to the employer → treat as internal; do not
-  publish them. Sending them to Gemini requires a recorded provider decision first.
-- Paid LLM calls: none without an explicit budget (attempts and spending cap) from Denys.
+  publish them. Sending them to Gemini: see `docs/decisions/0008`; blocked until Denys confirms
+  the API tier (the free tier lets Google use the content).
+- Paid LLM calls: total cap $1 (`LLM_BUDGET_USD`, Denys, 2026-11-19), enforced in code by the
+  spending meter and the `llm_calls` ledger. Raising it needs Denys's approval.
 - Production credentials: none. Network: GitHub, Linear, npm registry (installs)
   and (stage 2, approved) Gemini API only.
 - Linear: no new issues (workspace limit). Progress is tracked as ☐/☑ in the project description.

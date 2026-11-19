@@ -1,6 +1,8 @@
 """Persisted triage: analyses are cached, every conversation gets one work item, and the
 manager's status survives re-runs unless the player writes again."""
 
+import threading
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
@@ -9,13 +11,22 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.analysis.llm import FakeProvider, LLMError
+from app.analysis.llm.budget import SpendingMeter
+from app.db import init_db, make_engine, session_scope
 from app.ingestion.adapters import get_adapter
 from app.ingestion.pipeline import IngestBundle, ingest
 from app.ingestion.store import save_bundle
-from app.models import AnalysisRow, AuditRow, TaskRow
+from app.models import AnalysisRow, AuditRow, LLMCallRow, RunLeaseRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.schemas.domain import Message, SenderRole
-from app.tasks.service import InvalidTransition, TaskStatus, change_status, run_triage
+from app.tasks import service
+from app.tasks.service import (
+    InvalidTransition,
+    RunInProgress,
+    TaskStatus,
+    change_status,
+    run_triage,
+)
 
 CFG = PolicyConfig.load()
 NOW = datetime(2026, 11, 19, 9, 0, tzinfo=UTC)
@@ -174,3 +185,169 @@ def test_new_player_message_reopens_resolved_task(loaded: Session, bundle: Inges
         "resolved",
         "open",
     )
+
+
+# --- paid providers: spend ledger and budget ----------------------------------------------
+
+
+class MeteredProvider(FakeProvider):
+    """Bills a flat $0.10 per call against its meter, like a paid model would."""
+
+    simulated: ClassVar[bool] = False
+
+    def __init__(self, limit_usd: float) -> None:
+        self.meter = SpendingMeter(limit_usd=limit_usd)
+        self.calls = 0
+
+    def complete_json(self, system: str, user: str, schema: dict[str, Any]) -> str:
+        self.meter.reserve(0.10)
+        self.calls += 1
+        self.meter.settle(0.10, model="metered:test", input_tokens=100, cost_usd=0.10)
+        return super().complete_json(system, user, schema)
+
+
+def test_paid_calls_are_written_to_the_ledger(loaded: Session) -> None:
+    summary = run_triage(loaded, MeteredProvider(limit_usd=5.0), CFG, now=NOW)
+    calls = loaded.scalars(select(LLMCallRow)).all()
+    assert len(calls) == 9
+    assert all(c.model == "metered:test" and c.cost_usd == pytest.approx(0.10) for c in calls)
+    assert summary.spent_usd == pytest.approx(0.90)
+    assert summary.budget_left_usd == pytest.approx(4.10)
+    assert summary.budget_exhausted is False
+
+
+def test_exhausted_budget_fails_the_rest_without_calls(loaded: Session) -> None:
+    provider = MeteredProvider(limit_usd=0.45)
+    summary = run_triage(loaded, provider, CFG, now=NOW)
+    assert provider.calls == 4
+    assert (summary.analysed, summary.failed) == (4, 5)
+    assert summary.budget_exhausted is True
+    failed = loaded.scalars(select(AnalysisRow).where(AnalysisRow.status == "failed")).all()
+    assert all("BudgetExceeded" in (a.error or "") for a in failed)
+    assert len(_tasks(loaded)) == 9  # the queue is still complete, failed items go to review
+
+
+def test_budget_counts_spend_of_earlier_runs_and_processes(loaded: Session) -> None:
+    run_triage(loaded, MeteredProvider(limit_usd=0.45), CFG, now=NOW)
+    fresh = MeteredProvider(limit_usd=0.45)  # e.g. after an API restart
+    summary = run_triage(loaded, fresh, CFG, now=NOW)
+    assert fresh.calls == 0
+    assert summary.budget_left_usd == pytest.approx(0.05)
+
+
+def test_unmetered_provider_reports_no_budget(loaded: Session) -> None:
+    summary = run_triage(loaded, FakeProvider(), CFG, now=NOW)
+    assert (summary.spent_usd, summary.budget_left_usd, summary.budget_exhausted) == (
+        0.0,
+        None,
+        False,
+    )
+    assert loaded.scalars(select(LLMCallRow)).all() == []
+
+
+# --- bounded concurrency -------------------------------------------------------------------
+
+
+class SlowProvider(FakeProvider):
+    """Records how many calls overlap, to prove parallelism and its upper bound."""
+
+    def __init__(self) -> None:
+        self.in_flight = 0
+        self.max_in_flight = 0
+        self.calls = 0
+        self._lock = threading.Lock()
+
+    def complete_json(self, system: str, user: str, schema: dict[str, Any]) -> str:
+        with self._lock:
+            self.calls += 1
+            self.in_flight += 1
+            self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        time.sleep(0.05)
+        with self._lock:
+            self.in_flight -= 1
+        return super().complete_json(system, user, schema)
+
+
+def test_fresh_analyses_run_in_parallel_up_to_the_limit(loaded: Session) -> None:
+    provider = SlowProvider()
+    summary = run_triage(loaded, provider, CFG, now=NOW, workers=3)
+    assert provider.calls == 9
+    assert 2 <= provider.max_in_flight <= 3
+    assert summary.analysed == 9
+
+
+def test_parallel_run_gives_the_same_queue_as_sequential(
+    session: Session, bundle: IngestBundle, sample_paths
+) -> None:
+    save_bundle(session, bundle)
+    run_triage(session, FakeProvider(), CFG, now=NOW, workers=1)
+    sequential = {c: (t.priority, t.route, t.status) for c, t in _tasks(session).items()}
+
+    engine = make_engine("sqlite://")
+    init_db(engine)
+    for other in session_scope(engine):
+        save_bundle(other, bundle)
+        run_triage(other, SlowProvider(), CFG, now=NOW, workers=4)
+        parallel = {c: (t.priority, t.route, t.status) for c, t in _tasks(other).items()}
+    assert parallel == sequential
+
+
+def test_cached_conversations_are_not_sent_to_the_pool(loaded: Session) -> None:
+    run_triage(loaded, FakeProvider(), CFG, now=NOW)
+    provider = SlowProvider()
+    summary = run_triage(loaded, provider, CFG, now=NOW, workers=4)
+    assert provider.calls == 0
+    assert summary.reused == 9
+
+
+# --- review fixes: durable ledger, cross-process lease, cancellation ------------------------
+
+
+def test_spend_survives_a_crash_later_in_the_run(
+    loaded: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("bug after analysis")
+
+    monkeypatch.setattr(service, "_apply", boom)
+    with pytest.raises(RuntimeError):
+        run_triage(loaded, MeteredProvider(limit_usd=5.0), CFG, now=NOW)
+    loaded.rollback()
+    assert len(loaded.scalars(select(LLMCallRow)).all()) == 9
+    assert service.ledger_spent(loaded) == pytest.approx(0.90)
+
+
+def test_run_held_by_another_process_is_rejected(loaded: Session) -> None:
+    loaded.add(RunLeaseRow(id=1, holder="pid-other", started_at=datetime.now(UTC)))
+    loaded.commit()
+    with pytest.raises(RunInProgress):
+        run_triage(loaded, FakeProvider(), CFG, now=NOW)
+
+
+def test_stale_lease_of_a_dead_process_is_taken_over(loaded: Session) -> None:
+    started = datetime.now(UTC) - timedelta(hours=2)
+    loaded.add(RunLeaseRow(id=1, holder="pid-dead", started_at=started))
+    loaded.commit()
+    assert run_triage(loaded, FakeProvider(), CFG, now=NOW).analysed == 9
+    assert loaded.scalars(select(RunLeaseRow)).all() == []  # released after the run
+
+
+def test_error_during_parallel_stage_cancels_queued_calls(
+    loaded: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(self: Any, conv: Any, outcome: Any) -> Any:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(service._CachingAnalyzer, "_store", boom)
+    provider = SlowProvider()
+    with pytest.raises(KeyboardInterrupt):
+        run_triage(loaded, provider, CFG, now=NOW, workers=1)
+    assert provider.calls <= 2
+
+
+def test_unsaved_spend_of_an_earlier_crash_is_saved_next_run(loaded: Session) -> None:
+    provider = MeteredProvider(limit_usd=5.0)
+    provider.meter.settle(0.0, model="metered:test", cost_usd=0.20)  # booked, never saved
+    summary = run_triage(loaded, provider, CFG, now=NOW)
+    assert service.ledger_spent(loaded) == pytest.approx(1.10)
+    assert summary.spent_usd == pytest.approx(0.90)

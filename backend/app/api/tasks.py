@@ -12,9 +12,16 @@ from sqlalchemy.orm import Session
 from app.analysis.llm import LLMProvider
 from app.api.deps import get_policy, get_provider, get_session
 from app.api.schemas import ReasonOut, TaskOut
+from app.config import get_settings
 from app.models import AuditRow, TaskRow
 from app.policy.config import PolicyConfig
-from app.tasks.service import InvalidTransition, TaskStatus, change_status, run_triage
+from app.tasks.service import (
+    InvalidTransition,
+    RunInProgress,
+    TaskStatus,
+    change_status,
+    run_triage,
+)
 
 router = APIRouter(prefix="/api", tags=["tasks"])
 
@@ -46,6 +53,9 @@ class RunSummaryOut(BaseModel):
     created: int
     updated: int
     reopened: int
+    spent_usd: float  # paid LLM spend of this run
+    budget_left_usd: float | None  # None when the provider is not metered (fake)
+    budget_exhausted: bool  # some conversations were not analysed: spending limit reached
 
 
 def task_out(task: TaskRow) -> TaskOut:
@@ -97,4 +107,8 @@ def rerun_triage(
     policy: Annotated[PolicyConfig, Depends(get_policy)],
 ) -> RunSummaryOut:
     # Cached analyses are reused, so a re-run only calls the provider for changed conversations.
-    return RunSummaryOut(**asdict(run_triage(session, provider, policy)))
+    try:
+        summary = run_triage(session, provider, policy, workers=get_settings().llm_concurrency)
+    except RunInProgress as exc:
+        raise HTTPException(status_code=409, detail="triage is already running") from exc
+    return RunSummaryOut(**asdict(summary))

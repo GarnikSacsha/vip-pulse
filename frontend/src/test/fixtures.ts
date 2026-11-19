@@ -2,7 +2,7 @@ import type { Meta, Overview, QueueItem } from "../api/types";
 
 export const meta: Meta = {
   as_of: "2026-11-12T13:00:00Z",
-  provider: { name: "fake", model: "heuristic-v1", simulated: true, label: "эвристика fake, без модели" },
+  provider: { name: "fake", model: "heuristic-v1", simulated: true, label: "эвристика fake, без модели", budget_usd: null, spent_usd: null },
   counts: {
     total: 9,
     by_status: { open: 5, in_progress: 1, resolved: 1, no_action: 2 },
