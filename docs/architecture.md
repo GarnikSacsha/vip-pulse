@@ -45,6 +45,14 @@ dialogs.json ┴─► adapter ─► pipeline checks ─► SQLite
 
 ## Decisions
 
+Full records with evidence and rejected alternatives are in [`docs/decisions/`](decisions/):
+[0001 meaning / facts / rules](decisions/0001-llm-meaning-code-facts-rules-priority.md),
+[0002 SQLite](decisions/0002-sqlite-local-persistence.md),
+[0003 adapter per format](decisions/0003-adapter-per-source-format.md),
+[0004 reference time](decisions/0004-dataset-reference-time.md),
+[0005 safety net and simulated output](decisions/0005-safety-net-and-simulated-output.md),
+[0006 languages, provider, dependencies](decisions/0006-conventions-and-dependencies.md).
+
 - **Adapter per format.** The real `dialogs.json` / `players.csv` were not available when the
   foundation was built. The internal model is ours; only a new adapter is needed for the real files.
 - **"Now" = latest message in the dataset.** Demo data is historical; the wall clock would mark
