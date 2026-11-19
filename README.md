@@ -191,10 +191,11 @@ docs/
 | Done | Next |
 |---|---|
 | Import with validation report, dedupe, idempotent re-import | Adapter for the real `dialogs.json` / `players.csv` (awaiting files) |
-| Deterministic facts, SLA, safety net, priority with reasons | Gold set of hand-labelled conversations to measure quality |
+| Deterministic facts, SLA, safety net, priority with reasons | Harder gold cases and labelled task conversations |
 | Strict LLM contract, fail-closed evidence check, prompt-injection fencing | Screenshots, one-page brief and demo video |
 | Analysis cache, work items, status history | |
 | Three-pane inbox, evidence pills, player dossier, pulse indicator | |
+| Gold set and `eval` command (no LLM calls) | |
 | Gemini provider: retries, parallel calls, $1 spending cap with a ledger | |
 | Team lead SLA lanes and head-of-VIP view | |
 
