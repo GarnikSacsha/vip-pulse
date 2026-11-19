@@ -25,6 +25,10 @@ SAFE_RESTRICTED_ACTION = (
     "Не предлагать бонусы и акции: на аккаунте игрока стоят ограничения. Ответить по существу "
     "запроса."
 )
+SAFE_MULTI_ACCOUNT_ACTION = (
+    "Связаться с игроком лично: уточнить, чей это аккаунт и чья карта. Ничего не начислять на "
+    "другой аккаунт до проверки."
+)
 FALLBACK_ACTION = (
     "Автоматический разбор недоступен: прочитать переписку вручную и определить следующий шаг."
 )
@@ -200,6 +204,16 @@ def decide(
                 )
             )
         next_action = analysis.next_action
+
+    # 3b. Alerts: the manager must act personally; not a block, not a mistake. When a specialist
+    # or security already owns the case, their procedure comes first.
+    if safety.multi_account_message_ids and route == Route.MANAGER:
+        bump(
+            Priority.P1,
+            "alert.multi_account",
+            "Возможен второй аккаунт или общая карта: связаться с игроком лично и уточнить",
+        )
+        next_action = SAFE_MULTI_ACCOUNT_ACTION
 
     # 4. Guardrails on the suggested next step.
     rg = route == Route.RG_SPECIALIST

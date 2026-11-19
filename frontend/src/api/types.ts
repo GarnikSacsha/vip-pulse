@@ -73,6 +73,8 @@ export interface QueueItem {
   sla_lane: SlaLane;
   requires_review: boolean;
   quality_flags: string[];
+  /** Personal-contact alerts from the policy, e.g. "multi_account". */
+  alerts: string[];
   reasons: Reason[];
   last_message_at: string;
   simulated: boolean;
@@ -110,6 +112,8 @@ export interface TaskOut {
   next_action: string | null;
   reasons: Reason[];
   quality_flags: string[];
+  /** Personal-contact alerts from the policy, e.g. "multi_account". */
+  alerts: string[];
   requires_review: boolean;
   suppress_offers: boolean;
   updated_at: string;
@@ -212,4 +216,22 @@ export interface StatusChange {
   status: TaskStatus;
   note?: string;
   actor?: string;
+}
+
+// --- win-back (mirrors backend/app/api/schemas.py: WinbackOut) ---
+
+export type WinbackTier = "urgent" | "attention" | "introduce";
+
+export interface WinbackItem {
+  player: Player;
+  tier: WinbackTier;
+  reasons: Reason[];
+  next_action: string;
+  last_login_days: number | null;
+  /** null: the manager never wrote to this player. */
+  last_contact_days: number | null;
+  deposits_30d_usd: number | null;
+  deposits_prev_30d_usd: number | null;
+  favorite_game: string | null;
+  latest_conversation_id: string | null;
 }

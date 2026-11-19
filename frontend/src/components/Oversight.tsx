@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { QueueItem } from "../api/types";
 import { formatWait } from "../lib/format";
-import { CATEGORY_LABEL, ROUTE_LABEL, qualityFlagLabel } from "../lib/labels";
+import { CATEGORY_LABEL, ROUTE_LABEL, alertText, qualityFlagLabel } from "../lib/labels";
 import { PriorityBadge, Tag } from "./Badges";
 
 export interface KpiDef {
@@ -93,6 +93,11 @@ export function CompactItem({ item }: { item: QueueItem }) {
           {item.quality_flags.map((f) => (
             <Tag key={f} tone="danger">
               {qualityFlagLabel(f)}
+            </Tag>
+          ))}
+          {item.alerts.map((a) => (
+            <Tag key={a} tone="warn">
+              {alertText(a).tag}
             </Tag>
           ))}
           {item.simulated && <Tag>демо</Tag>}

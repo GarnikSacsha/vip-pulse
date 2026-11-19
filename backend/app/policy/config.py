@@ -33,8 +33,10 @@ class AnalysisConfig(_Cfg):
 class SafetyConfig(_Cfg):
     responsible_gaming: tuple[str, ...]
     fraud_security: tuple[str, ...]
+    # Another account or a shared card: the manager must contact the player personally.
+    multi_account: tuple[str, ...] = ()
 
-    @field_validator("responsible_gaming", "fraud_security")
+    @field_validator("responsible_gaming", "fraud_security", "multi_account")
     @classmethod
     def _lower(cls, words: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(w.lower() for w in words)
@@ -49,12 +51,18 @@ class PlayerConfig(_Cfg):
     deposit_spike_ratio: float = Field(default=1.7, gt=1)  # now > ratio × previous 30 days
 
 
+class WinbackConfig(_Cfg):
+    silent_days: int = Field(default=14, ge=1)  # no login this long = went silent
+    no_contact_days: int = Field(default=21, ge=1)  # last conversation this long ago
+
+
 class PolicyConfig(_Cfg):
     sla: SlaConfig
     analysis: AnalysisConfig
     safety: SafetyConfig
     offers: tuple[str, ...]
     player: PlayerConfig = PlayerConfig()
+    winback: WinbackConfig = WinbackConfig()
 
     @field_validator("offers")
     @classmethod
@@ -91,4 +99,21 @@ def mentions_offer(text: str, words: tuple[str, ...]) -> bool:
             if not _REFUSAL.search(before) and not _RETOLD.search(before):
                 return True
             start = lowered.find(word, start + 1)
+    return False
+
+
+# "нет второго аккаунта", "not another account": a denial right before the phrase.
+_DENIAL = re.compile(r"(?:^|\W)(?:нет|не|ни|без|no|not|never|without)\W+$")
+
+
+def mentions_phrase(text: str, phrases: tuple[str, ...]) -> bool:
+    """True when a phrase starts at a word boundary and is not denied right before it."""
+    lowered = text.lower()
+    for phrase in phrases:
+        start = lowered.find(phrase)
+        while start != -1:
+            boundary = start == 0 or not lowered[start - 1].isalnum()
+            if boundary and not _DENIAL.search(lowered[max(0, start - 20) : start]):
+                return True
+            start = lowered.find(phrase, start + 1)
     return False

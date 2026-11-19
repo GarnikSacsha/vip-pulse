@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from app.policy.config import PolicyConfig, contains_any, mentions_offer
+from app.policy.config import PolicyConfig, contains_any, mentions_offer, mentions_phrase
 from app.schemas.analysis import SafetyFlag
 from app.schemas.domain import Conversation, SenderRole
 
@@ -19,6 +19,8 @@ class SafetySignal(BaseModel):
     manager_offer_ids: tuple[str, ...] = ()
     message_order: tuple[str, ...] = ()
     player_message_ids: tuple[str, ...] = ()
+    # Player messages about another account or a shared card.
+    multi_account_message_ids: tuple[str, ...] = ()
 
     def offers_after(self, message_ids: tuple[str, ...] | list[str]) -> tuple[str, ...]:
         """Manager offers sent after the earliest of `message_ids`."""
@@ -35,8 +37,11 @@ def detect_safety(conv: Conversation, cfg: PolicyConfig) -> SafetySignal:
     fraud_ids: list[str] = []
     offer_ids: list[str] = []
     manager_offers: list[str] = []
+    multi: list[str] = []
     for message in conv.messages:
         if message.sender_role == SenderRole.PLAYER:
+            if mentions_phrase(message.text, cfg.safety.multi_account):
+                multi.append(message.message_id)
             if contains_any(message.text, cfg.safety.responsible_gaming):
                 rg_ids.append(message.message_id)
             if contains_any(message.text, cfg.safety.fraud_security):
@@ -52,6 +57,7 @@ def detect_safety(conv: Conversation, cfg: PolicyConfig) -> SafetySignal:
         "manager_offer_ids": tuple(manager_offers),
         "message_order": order,
         "player_message_ids": players,
+        "multi_account_message_ids": tuple(multi),
     }
 
     # Responsible gaming outranks fraud: it changes what the manager may say at all.

@@ -22,6 +22,7 @@ from app.api.schemas import (
     QueueItem,
     ReasonOut,
 )
+from app.api.tasks import alerts_of
 from app.api.tasks import task_out as to_task_out
 from app.ingestion.store import load_conversation
 from app.models import AnalysisRow, ConversationRow, PlayerRow, TaskRow
@@ -193,7 +194,11 @@ def list_queue(
                     sla_hours=sla_hours,
                     breached=late,
                     at_risk_share=sla.at_risk_share,
+                    reply_needed=not any(
+                        r.get("code") == "sla.no_reply_needed" for r in task.reasons
+                    ),
                 ),
+                alerts=alerts_of(task),
                 requires_review=task.requires_review,
                 quality_flags=task.quality_flags,
                 reasons=[ReasonOut(**r) for r in task.reasons],

@@ -50,6 +50,39 @@ safety:
     - unauthorized
     - stolen
 
+  # Another account or a shared payment card in a player's message. Not a block and not a
+  # mistake: an alert that the manager must contact the player personally and clarify.
+  multi_account:
+    - другой аккаунт
+    - другого аккаунта
+    - другом аккаунте
+    - второй аккаунт
+    - второго аккаунта
+    - втором аккаунте
+    - аккаунт жены
+    - аккаунт мужа
+    - аккаунт друга
+    - аккаунт брата
+    - аккаунт сестры
+    - акк жены
+    - акк мужа
+    - акк друга
+    - акк брата
+    - карта жены
+    - карты жены
+    - карту жены
+    - карта мужа
+    - карты мужа
+    - карту мужа
+    - той же карт
+    - та же карта
+    - another account
+    - second account
+    - other account
+    - same card
+    - wife's card
+    - husband's card
+
 # Signals from the player's profile (players.csv columns kept by the adapter). Missing columns
 # give no signal. All of this is decided in code; the LLM never sees it.
 player:
@@ -58,6 +91,11 @@ player:
   pending_withdrawal_usd: 1000   # a payout this large is waiting = money problem
   deposit_drop_share: 0.5        # deposits fell below half of the previous 30 days = churn risk
   deposit_spike_ratio: 1.7       # deposits grew 1.7x or more = check for harm, human review
+
+# Who to win back (page «Кого вернуть»). Restricted accounts are never listed.
+winback:
+  silent_days: 14       # no login for this many days = went silent (urgent)
+  no_contact_days: 21   # mention when the last conversation is older than this
 
 # Words that make a message a promotional offer. Offers are never suggested to players with a
 # responsible-gaming signal, and a manager sending one is flagged as a quality issue.

@@ -106,3 +106,15 @@ describe("team lead page: SLA lanes", () => {
     expect(within(lane(/^Всё ок/)).getByText(/Demo Player 004/)).toBeInTheDocument();
   });
 });
+
+describe("team lead page: personal contact", () => {
+  it("lists conversations that need the manager to call the player", async () => {
+    const multi = queueItem({ task_id: 9, conversation_id: "d-009", alerts: ["multi_account"], overdue: false, sla_lane: "ok" });
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [late, multi] });
+    renderLead();
+    const group = await screen.findByRole("region", { name: /Нужен личный контакт/ });
+    expect(within(group).getByRole("link", { name: /Demo Player 001/ })).toHaveAttribute("href", "/queue/d-009");
+    expect(within(group).getAllByRole("listitem")).toHaveLength(1);
+  });
+});
+

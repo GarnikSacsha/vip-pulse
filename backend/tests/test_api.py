@@ -418,3 +418,20 @@ def test_failed_analysis_has_no_sentiment(sample_paths) -> None:
     with TestClient(create_app(engine=_engine(sample_paths, BrokenProvider()))) as c:
         items = c.get("/api/queue").json()
     assert {i["sentiment"] for i in items} == {None}
+
+
+def test_queue_and_task_expose_alerts(client: TestClient) -> None:
+    items = client.get("/api/queue").json()
+    assert all(i["alerts"] == [] for i in items)  # the sample has no such case
+    detail = client.get("/api/conversations/d-001").json()
+    assert detail["task"]["alerts"] == []
+
+
+def test_winback_lists_candidates_and_filters_by_manager(client: TestClient) -> None:
+    body = client.get("/api/winback").json()
+    assert isinstance(body, list)
+    for item in body:
+        assert item["tier"] in {"urgent", "attention", "introduce"}
+        assert item["reasons"]
+    mine = client.get("/api/winback", params={"manager": "mgr-02"}).json()
+    assert all(i["player"]["manager_id"] == "mgr-02" for i in mine)
