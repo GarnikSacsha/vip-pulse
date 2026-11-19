@@ -1,6 +1,7 @@
 import { NavLink, Navigate, Outlet, Route, Routes } from "react-router";
 import { api } from "./api/client";
 import { formatDateTime } from "./lib/format";
+import { ConversationPage } from "./pages/ConversationPage";
 import { QueuePage, type ShellContext } from "./pages/QueuePage";
 import { useApi } from "./lib/useApi";
 
@@ -62,6 +63,7 @@ export function AppRoutes() {
       <Route element={<Shell />}>
         <Route index element={<Navigate to="/queue" replace />} />
         <Route path="queue" element={<QueuePage />} />
+        <Route path="conversations/:id" element={<ConversationPage />} />
       </Route>
     </Routes>
   );
