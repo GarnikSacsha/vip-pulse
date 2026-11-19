@@ -2,6 +2,7 @@ import type {
   AuditEvent,
   ConversationDetail,
   Meta,
+  Overview,
   QueueFilters,
   QueueItem,
   StatusChange,
@@ -38,9 +39,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 function queryString(filters: QueueFilters): string {
   const params = new URLSearchParams();
-  for (const key of ["status", "priority", "route"] as const) {
+  for (const key of ["status", "priority", "route", "manager"] as const) {
     for (const value of filters[key] ?? []) params.append(key, value);
   }
+  if (filters.overdue !== undefined) params.set("overdue", String(filters.overdue));
   const text = params.toString();
   return text ? `?${text}` : "";
 }
@@ -53,4 +55,5 @@ export const api = {
   updateTask: (taskId: number, change: StatusChange) =>
     request<TaskOut>(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(change) }),
   audit: (taskId: number) => request<AuditEvent[]>(`/api/tasks/${taskId}/audit`),
+  overview: () => request<Overview>("/api/overview"),
 };

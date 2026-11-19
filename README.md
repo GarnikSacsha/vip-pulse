@@ -18,8 +18,8 @@ human specialist.
 | Role | What they get |
 |---|---|
 | **VIP manager** (primary) | "Who do I answer first and what do I say?" A queue sorted by urgency and waiting time, the reason for each priority, a suggested next step, the messages that justify it. |
-| Team lead (next) | Overdue items, escalations, manager mistakes such as offers to vulnerable players. |
-| Head of VIP (next) | Aggregate picture from the same data. |
+| Team lead (`/lead`) | Overdue replies, escalations, manager mistakes such as offers to vulnerable players, workload per manager with a link to their queue. |
+| Head of VIP (`/overview`) | Headline numbers, replies within SLA, categories and channels, and where the numbers come from. Computed from the same queue, nothing hard-coded. |
 
 ## How it decides
 
@@ -76,7 +76,10 @@ If the console shows broken Cyrillic, run `$env:PYTHONIOENCODING = "utf-8"` firs
 2. **Open d-004:** the player's message is marked as the basis of the conclusion, with a red
    "do not offer bonuses" warning and the route to a responsible-gaming specialist.
 3. **Take an item in progress, then resolve it:** the history records who did what, with the note.
-4. **Change a threshold** in `thresholds.yaml` (for example `critical_wait_hours: 24 → 48`) and run
+4. **Team (`/lead`):** d-001 is the only overdue reply; d-004 and d-009 are escalations; mgr-01
+   opens their own queue. **Overview (`/overview`):** 5 of 9 conversations need action, 3 of 4
+   waiting players are inside the SLA, and the page says the categories come from the demo heuristic.
+5. **Change a threshold** in `thresholds.yaml` (for example `critical_wait_hours: 24 → 48`) and run
    `app.cli triage` again: priorities change, cached analyses are reused, nothing is re-sent to the model.
 
 The CLI prints the same queue the browser shows:
@@ -109,7 +112,8 @@ products ([decision 0008](docs/decisions/0008-gemini-provider-and-spending-cap.m
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/meta` | Dataset date, provider with its label and budget, counts by status and priority |
-| GET | `/api/queue?status=&priority=&route=` | Work items, most urgent first |
+| GET | `/api/queue?status=&priority=&route=&manager=&overdue=` | Work items, most urgent first; `overdue` = active and past the channel SLA |
+| GET | `/api/overview` | Totals, workload per manager, categories, channels, routes, analysis coverage |
 | GET | `/api/conversations/{id}` | Messages (evidence and pending marked), analysis, task, reasons, facts |
 | PATCH | `/api/tasks/{id}` | Change status (`open`, `in_progress`, `resolved`) with an optional note |
 | GET | `/api/tasks/{id}/audit` | Status history |
@@ -145,8 +149,8 @@ backend/app/
   cli.py        import / triage commands
 frontend/src/
   api/          typed client mirroring backend/app/api/schemas.py
-  pages/        queue, conversation
-  components/   badges and tags
+  pages/        queue, conversation, team lead, overview
+  components/   badges, tags, oversight tiles and panels
   lib/          formatting, labels, data loading hook
 data/
   sample/       synthetic fixture, one edge case per dialog (committed)
@@ -160,11 +164,12 @@ docs/
 | Done | Next |
 |---|---|
 | Import with validation report, dedupe, idempotent re-import | Adapter for the real `dialogs.json` / `players.csv` (awaiting files) |
-| Deterministic facts, SLA, safety net, priority with reasons | First live Gemini run (waiting for the key) |
-| Strict LLM contract, fail-closed evidence check, prompt-injection fencing | Team lead and head-of-VIP views |
-| Analysis cache, work items, status history | Gold set of hand-labelled conversations to measure quality |
-| Manager queue and conversation view in the browser | One-page brief and demo video |
+| Deterministic facts, SLA, safety net, priority with reasons | Visual polish from references, screenshots |
+| Strict LLM contract, fail-closed evidence check, prompt-injection fencing | Gold set of hand-labelled conversations to measure quality |
+| Analysis cache, work items, status history | One-page brief and demo video |
+| Manager queue and conversation view in the browser | |
 | Gemini provider: retries, parallel calls, $1 spending cap with a ledger | |
+| Team lead and head-of-VIP views | |
 
 ## Data and secrets
 

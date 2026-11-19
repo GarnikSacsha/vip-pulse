@@ -208,6 +208,157 @@ def test_triage_can_be_rerun_from_the_api(client: TestClient) -> None:
     }
 
 
+# --- oversight: overdue flag, manager filter, overview aggregates ---------------------------
+
+
+def test_queue_marks_overdue_only_active_items_past_their_sla(client: TestClient) -> None:
+    items = {i["conversation_id"]: i for i in client.get("/api/queue").json()}
+    assert {c for c, i in items.items() if i["overdue"]} == {"d-001"}
+    # d-003 waits 73 h but needs no action (closing message): not overdue work.
+    assert items["d-003"]["awaiting_reply"] is True
+    assert items["d-003"]["overdue"] is False
+    # d-009 is email: 5.75 h is inside its 8 h SLA.
+    assert items["d-009"]["overdue"] is False
+
+
+def test_queue_filters_by_manager_and_overdue(client: TestClient) -> None:
+    mine = client.get("/api/queue", params={"manager": "mgr-02"}).json()
+    assert {i["conversation_id"] for i in mine} == {"d-003", "d-004", "d-006", "d-009"}
+    late = client.get("/api/queue", params={"overdue": "true"}).json()
+    assert [i["conversation_id"] for i in late] == ["d-001"]
+
+
+def test_overview_totals(client: TestClient) -> None:
+    body = client.get("/api/overview").json()
+    assert body["as_of"] == "2026-11-12T13:00:00Z"
+    assert body["totals"] == {
+        "total": 9,
+        "active": 5,
+        "in_progress": 0,
+        "critical": 3,
+        "overdue": 1,
+        "awaiting_reply": 4,
+        "escalated": 2,
+        "quality_issues": 1,
+        "needs_review": 2,
+        "resolved": 0,
+        "no_action": 4,
+    }
+
+
+def test_overview_workload_by_manager(client: TestClient) -> None:
+    managers = client.get("/api/overview").json()["managers"]
+    assert managers == [
+        {
+            "manager_id": "mgr-01",
+            "total": 5,
+            "active": 3,
+            "in_progress": 0,
+            "critical": 1,
+            "overdue": 1,
+            "oldest_wait_hours": 27.0,
+        },
+        {
+            "manager_id": "mgr-02",
+            "total": 4,
+            "active": 2,
+            "in_progress": 0,
+            "critical": 2,
+            "overdue": 0,
+            "oldest_wait_hours": 5.75,
+        },
+    ]
+
+
+def test_overview_breakdowns_and_coverage(client: TestClient) -> None:
+    body = client.get("/api/overview").json()
+    categories = {c["category"]: (c["total"], c["active"]) for c in body["categories"]}
+    assert categories == {
+        "withdrawal": (1, 1),
+        "account": (1, 1),
+        "responsible_gaming": (1, 1),
+        "verification": (1, 1),
+        "other": (2, 1),
+        "general": (1, 0),
+        "deposit": (1, 0),
+        "technical": (1, 0),
+    }
+    # Most active first, then by volume.
+    assert [c["category"] for c in body["categories"]][-1] in {"general", "deposit", "technical"}
+    channels = {c["channel"]: (c["total"], c["active"], c["overdue"]) for c in body["channels"]}
+    assert channels == {"telegram": (3, 3, 1), "email": (4, 1, 0), "whatsapp": (2, 1, 0)}
+    assert body["routes"] == {"manager": 3, "rg_specialist": 1, "security": 1}
+    assert body["coverage"] == {
+        "conversations": 9,
+        "in_queue": 9,
+        "analysed": 9,
+        "failed": 0,
+        "simulated": 9,
+    }
+
+
+def test_overview_numbers_match_the_queue(client: TestClient) -> None:
+    body = client.get("/api/overview").json()
+    active = client.get("/api/queue", params={"status": ["open", "in_progress"]}).json()
+    assert body["totals"]["active"] == len(active)
+    assert sum(m["active"] for m in body["managers"]) == len(active)
+    assert sum(c["active"] for c in body["categories"]) == len(active)
+    assert sum(body["routes"].values()) == len(active)
+
+
+def test_overview_counts_failed_analyses(sample_paths) -> None:
+    with TestClient(create_app(engine=_engine(sample_paths, BrokenProvider()))) as c:
+        body = c.get("/api/overview").json()
+    assert body["coverage"] == {
+        "conversations": 9,
+        "in_queue": 9,
+        "analysed": 0,
+        "failed": 9,
+        "simulated": 0,
+    }
+    assert {cat["category"] for cat in body["categories"]} == {None}
+
+
+def test_overview_of_an_empty_database() -> None:
+    engine = make_engine("sqlite://")
+    init_db(engine)
+    with TestClient(create_app(engine=engine)) as c:
+        body = c.get("/api/overview").json()
+    assert body["as_of"] is None
+    assert body["totals"]["total"] == 0
+    assert body["managers"] == [] and body["categories"] == [] and body["channels"] == []
+
+
+def _sla_reason(item: dict) -> bool:
+    return any(r["code"] in {"sla.breached", "sla.money_critical"} for r in item["reasons"])
+
+
+def test_overdue_follows_the_decision_that_set_the_priority(sample_paths) -> None:
+    # The API runs with a looser SLA than the triage that set the priorities (e.g. thresholds
+    # edited, CLI re-run, API not restarted). "Overdue" must agree with the priority reasons.
+    loose = CFG.model_copy(
+        update={
+            "sla": CFG.sla.model_copy(update={"response_hours": 48, "channel_response_hours": {}})
+        }
+    )
+    with TestClient(create_app(engine=_engine(sample_paths), policy=loose)) as c:
+        items = c.get("/api/queue").json()
+    assert {i["conversation_id"] for i in items if i["overdue"]} == {"d-001"}
+    for item in items:
+        active = item["status"] in {"open", "in_progress"}
+        assert item["overdue"] == (active and _sla_reason(item)), item["conversation_id"]
+
+
+def test_coverage_counts_imported_conversations_not_yet_triaged(sample_paths) -> None:
+    engine = make_engine("sqlite://")
+    init_db(engine)
+    for session in session_scope(engine):
+        save_bundle(session, ingest(get_adapter("sample_v1"), *sample_paths))
+    with TestClient(create_app(engine=engine)) as c:
+        coverage = c.get("/api/overview").json()["coverage"]
+    assert (coverage["conversations"], coverage["in_queue"]) == (9, 0)
+
+
 def test_concurrent_triage_run_is_rejected(client: TestClient) -> None:
     with RUN_LOCK:
         response = client.post("/api/triage/run")

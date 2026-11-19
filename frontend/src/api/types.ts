@@ -59,6 +59,8 @@ export interface QueueItem {
   next_action: string | null;
   wait_hours: number | null;
   awaiting_reply: boolean;
+  /** Active work whose player waits longer than the channel's SLA. */
+  overdue: boolean;
   requires_review: boolean;
   quality_flags: string[];
   reasons: Reason[];
@@ -134,6 +136,65 @@ export interface QueueFilters {
   status?: TaskStatus[];
   priority?: Priority[];
   route?: Route[];
+  manager?: string[];
+  overdue?: boolean;
+}
+
+// --- oversight (mirrors backend/app/api/schemas.py: Overview) ---
+
+export interface OverviewTotals {
+  total: number;
+  active: number;
+  in_progress: number;
+  critical: number;
+  overdue: number;
+  awaiting_reply: number;
+  escalated: number;
+  quality_issues: number;
+  needs_review: number;
+  resolved: number;
+  no_action: number;
+}
+
+export interface ManagerLoad {
+  manager_id: string | null;
+  total: number;
+  active: number;
+  in_progress: number;
+  critical: number;
+  overdue: number;
+  oldest_wait_hours: number | null;
+}
+
+export interface CategoryCount {
+  category: Category | null;
+  total: number;
+  active: number;
+}
+
+export interface ChannelCount {
+  channel: Channel;
+  total: number;
+  active: number;
+  overdue: number;
+}
+
+export interface Overview {
+  as_of: string | null;
+  totals: OverviewTotals;
+  managers: ManagerLoad[];
+  categories: CategoryCount[];
+  channels: ChannelCount[];
+  routes: Record<Route, number>;
+  coverage: {
+    conversations: number;
+    /** Conversations with a work item; the rest wait for a triage run. */
+    in_queue: number;
+    analysed: number;
+    failed: number;
+    /** Of `analysed`: produced by the offline stand-in, not a model. */
+    simulated: number;
+  };
 }
 
 export interface StatusChange {

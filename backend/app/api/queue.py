@@ -93,8 +93,32 @@ def queue(
     status: Annotated[list[TaskStatus] | None, Query()] = None,
     priority: Annotated[list[Priority] | None, Query()] = None,
     route: Annotated[list[Route] | None, Query()] = None,
+    manager: Annotated[list[str] | None, Query(max_length=64)] = None,
+    overdue: bool | None = None,
 ) -> list[QueueItem]:
-    return list_queue(session, status=status, priority=priority, route=route)
+    return list_queue(
+        session,
+        status=status,
+        priority=priority,
+        route=route,
+        manager=manager,
+        overdue=overdue,
+    )
+
+
+ACTIVE = frozenset({TaskStatus.OPEN, TaskStatus.IN_PROGRESS})
+
+
+# Reasons the policy gives when the player waits past the SLA. Reading them, instead of comparing
+# the stored wait with today's thresholds, keeps "overdue" in step with the priority it explains.
+SLA_BREACH_REASONS = frozenset({"sla.breached", "sla.money_critical"})
+
+
+def is_overdue(task: TaskRow) -> bool:
+    """Active work that the last triage found waiting longer than the channel's SLA."""
+    return TaskStatus(task.status) in ACTIVE and any(
+        r.get("code") in SLA_BREACH_REASONS for r in task.reasons
+    )
 
 
 def list_queue(
@@ -103,8 +127,10 @@ def list_queue(
     status: list[TaskStatus] | None = None,
     priority: list[Priority] | None = None,
     route: list[Route] | None = None,
+    manager: list[str] | None = None,
+    overdue: bool | None = None,
 ) -> list[QueueItem]:
-    """The work queue, shared by the API and the CLI."""
+    """The work queue, shared by the API, the oversight views and the CLI."""
     query = (
         select(TaskRow, ConversationRow, PlayerRow, AnalysisRow)
         .join(ConversationRow, ConversationRow.conversation_id == TaskRow.conversation_id)
@@ -117,6 +143,8 @@ def list_queue(
         query = query.where(TaskRow.priority.in_([p.value for p in priority]))
     if route:
         query = query.where(TaskRow.route.in_([r.value for r in route]))
+    if manager:
+        query = query.where(PlayerRow.manager_id.in_(manager))
     # Most urgent first; within a priority, the longest wait first.
     query = query.order_by(
         TaskRow.priority, TaskRow.wait_hours.desc().nulls_last(), TaskRow.conversation_id
@@ -124,6 +152,9 @@ def list_queue(
 
     items = []
     for task, conv, player, analysis in session.execute(query):
+        late = is_overdue(task)
+        if overdue is not None and late != overdue:
+            continue
         result = _result(analysis)
         items.append(
             QueueItem(
@@ -139,6 +170,7 @@ def list_queue(
                 next_action=task.next_action,
                 wait_hours=task.wait_hours if task.awaiting_reply else None,
                 awaiting_reply=task.awaiting_reply,
+                overdue=late,
                 requires_review=task.requires_review,
                 quality_flags=task.quality_flags,
                 reasons=[ReasonOut(**r) for r in task.reasons],

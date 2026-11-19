@@ -63,6 +63,8 @@ class QueueItem(BaseModel):
     next_action: str | None
     wait_hours: float | None
     awaiting_reply: bool
+    # Active work (open / in progress) whose player waits longer than the channel's SLA.
+    overdue: bool
     requires_review: bool
     quality_flags: list[str]
     reasons: list[ReasonOut]
@@ -126,3 +128,61 @@ class ConversationDetail(BaseModel):
     analysis: AnalysisOut | None
     task: TaskOut | None
     facts: FactsOut
+
+
+# --- oversight: team lead and head of VIP ----------------------------------------------------
+
+
+class OverviewTotals(BaseModel):
+    total: int  # conversations with a work item
+    active: int  # open + in progress
+    in_progress: int
+    critical: int  # active P0
+    overdue: int  # active and waiting longer than the channel SLA
+    awaiting_reply: int  # active and the player spoke last
+    escalated: int  # active and routed away from the manager (RG specialist, security)
+    quality_issues: int  # active with a manager-quality flag (e.g. offer to a vulnerable player)
+    needs_review: int  # active and the analysis must be checked by a person
+    resolved: int
+    no_action: int
+
+
+class ManagerLoad(BaseModel):
+    manager_id: str | None  # from players.csv; None when the player has no manager
+    total: int
+    active: int
+    in_progress: int
+    critical: int
+    overdue: int
+    oldest_wait_hours: float | None  # longest wait among active items awaiting a reply
+
+
+class CategoryCount(BaseModel):
+    category: Category | None  # None: the analysis failed
+    total: int
+    active: int
+
+
+class ChannelCount(BaseModel):
+    channel: Channel
+    total: int
+    active: int
+    overdue: int
+
+
+class Coverage(BaseModel):
+    conversations: int  # imported, whether triaged or not
+    in_queue: int  # conversations with a work item (the rest wait for a triage run)
+    analysed: int  # successful analyses behind the work items
+    failed: int
+    simulated: int  # of `analysed`: produced by the offline stand-in, not a model
+
+
+class Overview(BaseModel):
+    as_of: datetime | None
+    totals: OverviewTotals
+    managers: list[ManagerLoad]
+    categories: list[CategoryCount]
+    channels: list[ChannelCount]
+    routes: dict[Route, int]  # active items per route
+    coverage: Coverage

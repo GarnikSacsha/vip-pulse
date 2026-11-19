@@ -87,7 +87,9 @@ Full records with evidence and rejected alternatives are in [`docs/decisions/`](
 1. **Done — stage 1:** backend foundation, ingestion, policy, LLM contract, offline provider, CLI, CI.
 2. **Done — stage 2a (browser slice):** persisted analyses with cache, work items and audit, REST
    API, manager queue and conversation view.
-3. **Stage 2b:** Gemini provider with retries, bounded concurrency and a $1 spending cap
-   (done, [0008](decisions/0008-gemini-provider-and-spending-cap.md)); real data adapter + data
-   contract (waiting for the files).
-4. **Then:** team lead and head-of-VIP views, gold set evaluation, one-page brief, demo.
+3. **Done — stage 2b:** Gemini provider with retries, bounded concurrency and a $1 spending cap
+   ([0008](decisions/0008-gemini-provider-and-spending-cap.md)); real data adapter + data
+   contract wait for the files.
+4. **Done — stage 2c (oversight views):** `/api/overview` and the team lead / head-of-VIP pages,
+   computed from the same queue the managers see.
+5. **Then:** gold set evaluation, visual polish, one-page brief, demo.
