@@ -1,5 +1,6 @@
 """Typed policy configuration loaded from thresholds.yaml."""
 
+import re
 from pathlib import Path
 
 import yaml
@@ -37,11 +38,21 @@ class SafetyConfig(_Cfg):
         return tuple(w.lower() for w in words)
 
 
+class PlayerConfig(_Cfg):
+    # account_status values that forbid offers; "self_excluded" also routes to the RG specialist.
+    restricted_statuses: tuple[str, ...] = ("self_excluded", "limit_set")
+    failed_deposits_7d: int = Field(default=3, ge=1)
+    pending_withdrawal_usd: float = Field(default=1000, gt=0)
+    deposit_drop_share: float = Field(default=0.5, gt=0, lt=1)  # now < share × previous 30 days
+    deposit_spike_ratio: float = Field(default=1.7, gt=1)  # now > ratio × previous 30 days
+
+
 class PolicyConfig(_Cfg):
     sla: SlaConfig
     analysis: AnalysisConfig
     safety: SafetyConfig
     offers: tuple[str, ...]
+    player: PlayerConfig = PlayerConfig()
 
     @field_validator("offers")
     @classmethod
@@ -57,3 +68,26 @@ class PolicyConfig(_Cfg):
 def contains_any(text: str, words: tuple[str, ...]) -> bool:
     lowered = text.lower()
     return any(word in lowered for word in words)
+
+
+# "без бонусов", "no bonus today", "не предлагаю бонус": a word right before the offer (or one
+# word before it) that negates it. Refusing an offer is not making one.
+_NEGATION = re.compile(r"(?:^|\W)(?:без|не|нет|никаких|no|not|without|never)\W+(?:\w+\W+)?$")
+
+
+def mentions_offer(text: str, words: tuple[str, ...]) -> bool:
+    """True when the text offers something from `words`.
+
+    A message that refuses an offer anywhere ("давай сегодня без бонусов") is a refusal as a
+    whole, even when it also quotes the player's request ("ты просишь бонусы").
+    """
+    lowered = text.lower()
+    plain = False
+    for word in words:
+        start = lowered.find(word)
+        while start != -1:
+            if _NEGATION.search(lowered[max(0, start - 30) : start]):
+                return False
+            plain = True
+            start = lowered.find(word, start + 1)
+    return plain

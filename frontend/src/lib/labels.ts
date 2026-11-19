@@ -46,6 +46,7 @@ export const SENDER_LABEL: Record<SenderRole, string> = {
 
 const QUALITY_FLAG_LABEL: Record<string, string> = {
   offer_to_vulnerable_player: "Бонус уязвимому игроку",
+  offer_to_restricted_player: "Бонус игроку с ограничением",
 };
 
 export function qualityFlagLabel(flag: string): string {
