@@ -52,6 +52,8 @@ def _player(row: PlayerRow) -> PlayerOut:
         display_name=row.display_name,
         manager_id=row.manager_id,
         segment=row.segment,
+        country=row.attributes.get("country") if row.attributes else None,
+        registered_at=row.attributes.get("registered_at") if row.attributes else None,
     )
 
 
@@ -96,6 +98,7 @@ def queue(
     priority: Annotated[list[Priority] | None, Query()] = None,
     route: Annotated[list[Route] | None, Query()] = None,
     manager: Annotated[list[str] | None, Query(max_length=64)] = None,
+    player: Annotated[list[str] | None, Query(max_length=64)] = None,
     overdue: bool | None = None,
 ) -> list[QueueItem]:
     return list_queue(
@@ -105,6 +108,7 @@ def queue(
         priority=priority,
         route=route,
         manager=manager,
+        player=player,
         overdue=overdue,
     )
 
@@ -132,6 +136,7 @@ def list_queue(
     priority: list[Priority] | None = None,
     route: list[Route] | None = None,
     manager: list[str] | None = None,
+    player: list[str] | None = None,
     overdue: bool | None = None,
 ) -> list[QueueItem]:
     """The work queue, shared by the API, the oversight views and the CLI."""
@@ -150,6 +155,8 @@ def list_queue(
         query = query.where(TaskRow.route.in_([r.value for r in route]))
     if manager:
         query = query.where(PlayerRow.manager_id.in_(manager))
+    if player:
+        query = query.where(PlayerRow.player_id.in_(player))
     # Most urgent first; within a priority, the longest wait first.
     query = query.order_by(
         TaskRow.priority, TaskRow.wait_hours.desc().nulls_last(), TaskRow.conversation_id
@@ -172,6 +179,7 @@ def list_queue(
                 priority=task.priority,
                 route=task.route,
                 category=result.get("category"),
+                sentiment=result.get("sentiment"),
                 summary=result.get("summary"),
                 next_action=task.next_action,
                 wait_hours=task.wait_hours if task.awaiting_reply else None,

@@ -44,6 +44,9 @@ class PlayerOut(BaseModel):
     display_name: str | None
     manager_id: str | None
     segment: str | None
+    # Optional profile columns; an adapter maps its source columns to these names.
+    country: str | None = None
+    registered_at: str | None = None
 
 
 class ReasonOut(BaseModel):
@@ -60,6 +63,7 @@ class QueueItem(BaseModel):
     priority: Priority
     route: Route
     category: Category | None  # None when the analysis failed
+    sentiment: Sentiment | None  # the player's tone, for the dossier trend; None when failed
     summary: str | None
     next_action: str | None
     wait_hours: float | None
