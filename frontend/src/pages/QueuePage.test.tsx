@@ -112,3 +112,23 @@ describe("queue page", () => {
     expect(await screen.findByRole("link", { name: /Demo Player 001/ })).toBeInTheDocument();
   });
 });
+
+describe("queue page: oversight links", () => {
+  it("filters by manager from a lead's link and can drop the filter", async () => {
+    const user = userEvent.setup();
+    const calls = serveApi(vi, { "/api/meta": meta, "/api/queue": [queueItem()] });
+    renderQueue("/queue?manager=mgr-01");
+    await screen.findAllByRole("link", { name: /Demo Player/ });
+    expect(queueCalls(calls).at(-1)).toBe("/api/queue?status=open&status=in_progress&manager=mgr-01");
+
+    await user.click(screen.getByRole("button", { name: /Менеджер mgr-01/ }));
+    expect(queueCalls(calls).at(-1)).toBe("/api/queue?status=open&status=in_progress");
+  });
+
+  it("marks overdue items", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/queue": [queueItem()] });
+    renderQueue();
+    const row = await screen.findByRole("link", { name: /Demo Player 001/ });
+    expect(within(row).getByText("Просрочено")).toBeInTheDocument();
+  });
+});

@@ -39,12 +39,20 @@ export function QueuePage() {
   const [params, setParams] = useSearchParams();
   const view = VIEWS.find((v) => v.id === params.get("view")) ?? ACTIVE_VIEW;
   const priority = PRIORITIES.find((p) => p === params.get("priority"));
+  const manager = params.get("manager");
 
   const filters: QueueFilters = {
     ...(view.statuses ? { status: view.statuses } : {}),
     ...(priority ? { priority: [priority] } : {}),
+    ...(manager ? { manager: [manager] } : {}),
   };
   const queue = useApi(() => api.queue(filters), JSON.stringify(filters));
+
+  function clearManager() {
+    const p = new URLSearchParams(params);
+    p.delete("manager");
+    setParams(p);
+  }
 
   function update(next: { view?: View; priority?: Priority | null }) {
     const p = new URLSearchParams(params);
@@ -65,6 +73,17 @@ export function QueuePage() {
           <p className="mt-0.5 text-sm text-muted">
             Сначала самое срочное, внутри приоритета — кто дольше ждёт ответа.
           </p>
+          {manager && (
+            <button
+              type="button"
+              onClick={clearManager}
+              aria-label={`Менеджер ${manager}: снять фильтр`}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-chip px-2 py-0.5 text-xs font-medium hover:bg-line"
+            >
+              Менеджер {manager}
+              <span aria-hidden="true">×</span>
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-1" aria-label="Фильтр по приоритету">
           {PRIORITIES.map((p) => (
@@ -192,6 +211,7 @@ function QueueRow({ item }: { item: QueueItem }) {
               {qualityFlagLabel(f)}
             </Tag>
           ))}
+          {item.overdue && <Tag tone="danger">Просрочено</Tag>}
           {item.requires_review && <Tag tone="warn">Нужна проверка</Tag>}
           {(item.status === "in_progress" || item.status === "resolved") && (
             <Tag tone={item.status === "resolved" ? "ok" : "accent"}>{STATUS_LABEL[item.status]}</Tag>

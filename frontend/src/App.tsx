@@ -2,8 +2,16 @@ import { NavLink, Navigate, Outlet, Route, Routes } from "react-router";
 import { api } from "./api/client";
 import { formatDateTime } from "./lib/format";
 import { ConversationPage } from "./pages/ConversationPage";
+import { LeadPage } from "./pages/LeadPage";
+import { OverviewPage } from "./pages/OverviewPage";
 import { QueuePage, type ShellContext } from "./pages/QueuePage";
 import { useApi } from "./lib/useApi";
+
+const NAV = [
+  { to: "/queue", label: "Очередь", hint: "менеджер" },
+  { to: "/lead", label: "Команда", hint: "тимлид" },
+  { to: "/overview", label: "Обзор", hint: "руководитель VIP" },
+];
 
 function Shell() {
   const meta = useApi(() => api.meta(), "meta");
@@ -16,15 +24,19 @@ function Shell() {
             <span className="text-[15px] font-semibold tracking-tight">VIP Pulse</span>
             <span className="hidden text-sm text-muted sm:inline">разбор переписок VIP-отдела</span>
           </div>
-          <nav className="flex gap-1 text-sm">
-            <NavLink
-              to="/queue"
-              className={({ isActive }) =>
-                `rounded-md px-2.5 py-1 ${isActive ? "bg-chip text-ink" : "text-muted hover:text-ink"}`
-              }
-            >
-              Очередь
-            </NavLink>
+          <nav aria-label="Разделы" className="flex gap-1 text-sm">
+            {NAV.map((n) => (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                title={`Для роли: ${n.hint}`}
+                className={({ isActive }) =>
+                  `rounded-md px-2.5 py-1 ${isActive ? "bg-chip text-ink" : "text-muted hover:text-ink"}`
+                }
+              >
+                {n.label}
+              </NavLink>
+            ))}
           </nav>
           <div className="ml-auto text-xs text-muted">
             {meta.data?.as_of && <>Данные на {formatDateTime(meta.data.as_of)}</>}
@@ -64,6 +76,8 @@ export function AppRoutes() {
         <Route index element={<Navigate to="/queue" replace />} />
         <Route path="queue" element={<QueuePage />} />
         <Route path="conversations/:id" element={<ConversationPage />} />
+        <Route path="lead" element={<LeadPage />} />
+        <Route path="overview" element={<OverviewPage />} />
       </Route>
     </Routes>
   );
