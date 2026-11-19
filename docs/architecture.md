@@ -29,7 +29,12 @@ dialogs.json ┴─► adapter ─► pipeline checks ─► SQLite
                      priority decision P0–P3 + route + reasons
                      + human-review flag + safe next action
                                    ▼
-                     work queue (CLI today; API + UI next)
+                     work items (one per conversation) + audit trail
+                     analyses cached by input hash
+                                   ▼
+             FastAPI  /api/queue · /api/conversations · /api/tasks
+                                   ▼
+             React UI: queue → conversation with evidence → status change
 ```
 
 ## Modules
@@ -40,8 +45,11 @@ dialogs.json ┴─► adapter ─► pipeline checks ─► SQLite
 | `app/ingestion/` | Adapter per source format, normalization, dedupe, import report, idempotent store |
 | `app/policy/` | Facts, safety net, priority rules, `thresholds.yaml` |
 | `app/analysis/` | Prompt, provider interface (`fake` now, Gemini next), validation service |
-| `app/triage.py` | Glue: facts → analysis → policy → sorted queue |
+| `app/triage.py` | Pure glue: facts → analysis → policy → sorted queue (no database) |
+| `app/tasks/` | Persisted triage: analysis cache, work items, status transitions, audit |
+| `app/api/` | FastAPI routers and response models (the UI contract) |
 | `app/cli.py` | `import` and `triage` commands |
+| `frontend/src/` | React UI: typed API client, queue and conversation pages |
 
 ## Decisions
 
@@ -51,7 +59,8 @@ Full records with evidence and rejected alternatives are in [`docs/decisions/`](
 [0003 adapter per format](decisions/0003-adapter-per-source-format.md),
 [0004 reference time](decisions/0004-dataset-reference-time.md),
 [0005 safety net and simulated output](decisions/0005-safety-net-and-simulated-output.md),
-[0006 languages, provider, dependencies](decisions/0006-conventions-and-dependencies.md).
+[0006 languages, provider, dependencies](decisions/0006-conventions-and-dependencies.md),
+[0007 work item lifecycle and analysis cache](decisions/0007-work-item-lifecycle-and-analysis-cache.md).
 
 - **Adapter per format.** The real `dialogs.json` / `players.csv` were not available when the
   foundation was built. The internal model is ours; only a new adapter is needed for the real files.
@@ -70,12 +79,14 @@ Full records with evidence and rejected alternatives are in [`docs/decisions/`](
   decides there is nothing to answer. Without an LLM result the policy stays conservative.
 - **Thresholds are assumptions.** The task gives no evaluation rules, so every number lives in
   `thresholds.yaml`, commented as illustrative.
+- **The manager owns the status.** Re-runs update the decision, not the status; a closed item
+  reopens only when the player writes again. Analyses are cached, so tuning thresholds is free.
 
 ## Roadmap
 
-1. **Stage 1 (done here):** backend foundation, ingestion, policy, LLM contract, offline provider, CLI, CI.
-2. **Stage 2:** real data adapter + data contract, Gemini provider, batch runner (retry/backoff,
-   bounded concurrency, cache by input hash), persisted analyses, tasks + audit, API.
-3. **Stage 3:** React UI: manager queue, player timeline with evidence highlighting, team lead and
-   head-of-VIP views.
-4. **Stage 4:** gold set evaluation, one-page brief, demo video / deployment.
+1. **Done — stage 1:** backend foundation, ingestion, policy, LLM contract, offline provider, CLI, CI.
+2. **Done — stage 2a (browser slice):** persisted analyses with cache, work items and audit, REST
+   API, manager queue and conversation view.
+3. **Next — stage 2b:** real data adapter + data contract, Gemini provider (retries, bounded
+   concurrency, cost cap).
+4. **Then:** team lead and head-of-VIP views, gold set evaluation, one-page brief, demo.
