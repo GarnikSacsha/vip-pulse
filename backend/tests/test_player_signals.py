@@ -169,3 +169,44 @@ def test_setting_a_limit_is_not_an_offer() -> None:
 def test_a_message_that_refuses_bonuses_is_not_an_offer_even_if_it_quotes_the_request() -> None:
     conv = _conv((SenderRole.MANAGER, "Ты просишь бонусы каждый день. Давай сегодня без бонусов."))
     assert _decide(conv, _player(account_status="limit_set")).quality_flags == ()
+
+
+# --- offers after a responsible-gaming signal raised by the model, not the keyword net ---------
+
+
+def _rg_by_model(evidence: list[str]) -> LLMAnalysis:
+    return _analysis(
+        category="responsible_gaming",
+        sentiment="negative",
+        requires_action=True,
+        next_action="Передать специалисту",
+        safety_flag="responsible_gaming",
+        evidence_message_ids=evidence,
+    )
+
+
+def test_offer_after_a_model_raised_rg_signal_is_a_manager_mistake() -> None:
+    conv = _conv(
+        (SenderRole.PLAYER, "Слил всё за вечер, я в минусе по уши"),
+        (SenderRole.MANAGER, "Давай дам кешбэк 20%, отыграешь!"),
+    )
+    d = _decide(conv, _player(), _rg_by_model(["c-1"]))
+    assert "offer_to_vulnerable_player" in d.quality_flags
+
+
+def test_offer_before_the_rg_signal_is_not_flagged() -> None:
+    conv = _conv(
+        (SenderRole.MANAGER, "С днём рождения! Держи фриспины."),
+        (SenderRole.PLAYER, "Спасибо. Кстати, хочу поставить себе паузу, слишком много играю."),
+    )
+    d = _decide(conv, _player(), _rg_by_model(["c-2"]))
+    assert d.quality_flags == ()
+
+
+def test_spelling_variants_of_cashback_count_as_offers() -> None:
+    for text in ("Начислю кешбэк", "Начислю кэшбек", "Отыграешь всё сегодня"):
+        conv = _conv((SenderRole.MANAGER, text))
+        assert (
+            "offer_to_restricted_player"
+            in _decide(conv, _player(account_status="limit_set")).quality_flags
+        ), text

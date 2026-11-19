@@ -118,7 +118,11 @@ def decide(
                 f"Менеджер предложил бонус игроку с ограничением ({label})",
             )
 
-    if safety.offer_after_rg_message_ids:
+    offers_after_rg = safety.offer_after_rg_message_ids
+    if not offers_after_rg and flag == SafetyFlag.RESPONSIBLE_GAMING and analysis is not None:
+        # The signal came from the analysis: check offers after the messages it cites.
+        offers_after_rg = safety.offers_after(analysis.evidence_message_ids)
+    if offers_after_rg:
         quality.append("offer_to_vulnerable_player")
         reasons.append(
             Reason(
