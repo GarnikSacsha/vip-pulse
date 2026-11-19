@@ -106,3 +106,31 @@ class AuditRow(Base):
     before: Mapped[str | None] = mapped_column(String(32))
     after: Mapped[str | None] = mapped_column(String(32))
     note: Mapped[str | None] = mapped_column(Text)
+
+
+class LLMCallRow(Base):
+    """One billed call to a paid model. The sum of `cost_usd` is checked against LLM_BUDGET_USD."""
+
+    __tablename__ = "llm_calls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(UTCDateTime())
+    model: Mapped[str] = mapped_column(String(100))
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    estimated: Mapped[bool] = mapped_column(Boolean, default=False)
+    outcome: Mapped[str] = mapped_column(String(32))
+
+
+class RunLeaseRow(Base):
+    """At most one triage run per database, across processes (CLI and API share the budget).
+
+    A lease older than `LEASE_TTL` (app.tasks.service) is left by a crashed process: taken over.
+    """
+
+    __tablename__ = "run_lease"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # always 1
+    holder: Mapped[str] = mapped_column(String(100))
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime())

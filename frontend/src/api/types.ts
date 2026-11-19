@@ -20,6 +20,8 @@ export interface ProviderInfo {
   model: string;
   simulated: boolean;
   label: string;
+  budget_usd: number | null;
+  spent_usd: number | null;
 }
 
 export interface Meta {

@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.analysis.llm import LLMProvider
+from app.analysis.llm.budget import meter_of
 from app.api.deps import get_policy, get_provider, get_session
 from app.api.schemas import (
     AnalysisOut,
@@ -28,7 +29,7 @@ from app.policy.config import PolicyConfig
 from app.policy.facts import compute_facts
 from app.policy.priority import LABEL_MODEL, LABEL_SIMULATED, Route
 from app.schemas.analysis import Priority, ProcessingStatus
-from app.tasks.service import TaskStatus
+from app.tasks.service import TaskStatus, ledger_spent
 
 router = APIRouter(prefix="/api", tags=["queue"])
 
@@ -71,6 +72,7 @@ def meta(session: SessionDep, provider: Annotated[LLMProvider, Depends(get_provi
     for status, priority, count in rows:
         by_status[TaskStatus(status)] += count
         by_priority[Priority(priority)] += count
+    meter = meter_of(provider)
     return Meta(
         as_of=_as_of(session),
         provider=ProviderInfo(
@@ -78,6 +80,8 @@ def meta(session: SessionDep, provider: Annotated[LLMProvider, Depends(get_provi
             model=provider.model,
             simulated=provider.simulated,
             label=_label(provider.simulated),
+            budget_usd=meter.limit_usd if meter else None,
+            spent_usd=ledger_spent(session) if meter else None,
         ),
         counts=Counts(total=sum(by_status.values()), by_status=by_status, by_priority=by_priority),
     )

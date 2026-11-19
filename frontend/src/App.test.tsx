@@ -12,6 +12,8 @@ function meta(simulated: boolean): Meta {
       model: simulated ? "heuristic-v1" : "gemini-2.5-flash",
       simulated,
       label: simulated ? "эвристика fake, без модели" : "AI",
+      budget_usd: simulated ? null : 1,
+      spent_usd: simulated ? null : 0,
     },
     counts: {
       total: 9,
