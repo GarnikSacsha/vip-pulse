@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { AppRoutes } from "../App";
-import { meta, queueItem, serveApi } from "../test/fixtures";
+import { conversation, meta, queueItem, serveApi } from "../test/fixtures";
 
 const rg = queueItem({
   task_id: 3,
@@ -39,10 +39,10 @@ describe("queue page", () => {
 
     const [first] = rows;
     if (!first) throw new Error("no rows");
-    expect(first).toHaveAttribute("href", "/conversations/d-001");
+    expect(first).toHaveAttribute("href", "/queue/d-001");
+    expect(within(first).getByRole("img", { name: /SLA нарушен/ })).toBeInTheDocument();
     expect(within(first).getByText("P0")).toBeInTheDocument();
-    expect(within(first).getByText("Вывод средств")).toBeInTheDocument();
-    expect(within(first).getByText("Telegram")).toBeInTheDocument();
+    expect(first).toHaveTextContent("Вывод средств · Telegram · platinum");
     expect(within(first).getByText("1 д 3 ч")).toBeInTheDocument();
     expect(within(first).getByText("Проверить статус вывода и сообщить срок.")).toBeInTheDocument();
   });
@@ -156,3 +156,144 @@ describe("queue page: review fixes", () => {
     expect(within(model).queryByText("демо")).not.toBeInTheDocument();
   });
 });
+
+describe("inbox: three panes and keyboard", () => {
+  const second = queueItem({
+    task_id: 4,
+    conversation_id: "d-004",
+    player: { player_id: "p-004", display_name: "Demo Player 004", manager_id: "mgr-02", segment: "gold" },
+    priority: "P1",
+    overdue: false,
+    sla_lane: "waiting",
+    wait_hours: 1,
+  });
+  const routes = {
+    "/api/meta": meta,
+    "/api/queue": [queueItem(), second],
+    "/api/conversations/d-001": conversation(),
+    "/api/conversations/d-004": conversation({
+      conversation_id: "d-004",
+      player: { player_id: "p-004", display_name: "Demo Player 004", manager_id: "mgr-02", segment: "gold" },
+    }),
+  };
+
+  it("asks to pick a conversation until one is selected", async () => {
+    serveApi(vi, routes);
+    renderQueue();
+    await screen.findAllByRole("link", { name: /Demo Player/ });
+    expect(screen.getByText("Выберите диалог слева")).toBeInTheDocument();
+  });
+
+  it("opens the selected conversation next to the list and keeps the filters", async () => {
+    const user = userEvent.setup();
+    serveApi(vi, routes);
+    renderQueue("/queue?priority=P0");
+    const [row] = await screen.findAllByRole("link", { name: /Demo Player 001/ });
+    expect(row).toHaveAttribute("href", "/queue/d-001?priority=P0");
+    await user.click(row as HTMLElement);
+
+    expect(await screen.findByRole("heading", { name: "Demo Player 001" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Очередь" })).toBeInTheDocument();
+    expect(row).toHaveAttribute("aria-current", "page");
+  });
+
+  it("moves between conversations with j and k", async () => {
+    const user = userEvent.setup();
+    serveApi(vi, routes);
+    renderQueue();
+    await screen.findAllByRole("link", { name: /Demo Player/ });
+
+    await user.keyboard("j");
+    expect(await screen.findByRole("heading", { name: "Demo Player 001" })).toBeInTheDocument();
+    await user.keyboard("j");
+    expect(await screen.findByRole("heading", { name: "Demo Player 004" })).toBeInTheDocument();
+    await user.keyboard("j"); // already the last one: stays
+    expect(await screen.findByRole("heading", { name: "Demo Player 004" })).toBeInTheDocument();
+    await user.keyboard("k");
+    expect(await screen.findByRole("heading", { name: "Demo Player 001" })).toBeInTheDocument();
+  });
+
+  it("does not steal j and k while the manager types a note", async () => {
+    const user = userEvent.setup();
+    serveApi(vi, routes);
+    renderQueue("/queue/d-001");
+    await user.type(await screen.findByLabelText("Комментарий к действию"), "jk");
+    expect(screen.getByLabelText("Комментарий к действию")).toHaveValue("jk");
+    expect(screen.getByRole("heading", { name: "Demo Player 001" })).toBeInTheDocument();
+  });
+
+  it("redirects old conversation links into the inbox", async () => {
+    serveApi(vi, routes);
+    renderQueue("/conversations/d-004");
+    expect(await screen.findByRole("heading", { name: "Demo Player 004" })).toBeInTheDocument();
+    const [row] = await screen.findAllByRole("link", { name: /Demo Player 004/ });
+    expect(row).toHaveAttribute("aria-current", "page");
+  });
+});
+
+describe("inbox: review fixes", () => {
+  const a = queueItem({ task_id: 1, conversation_id: "d-001" });
+  const b = queueItem({
+    task_id: 2,
+    conversation_id: "d-002",
+    player: { player_id: "p-002", display_name: "Demo Player 002", manager_id: "mgr-01", segment: "gold" },
+    priority: "P1",
+  });
+  const c = queueItem({
+    task_id: 3,
+    conversation_id: "d-003",
+    player: { player_id: "p-003", display_name: "Demo Player 003", manager_id: "mgr-02", segment: "gold" },
+    priority: "P2",
+  });
+
+  it("refreshes the list and the counters after a status change, and j continues from there", async () => {
+    const user = userEvent.setup();
+    let resolved = false;
+    const base = conversation();
+    if (!base.task) throw new Error("fixture");
+    const calls = serveApi(vi, {
+      "/api/meta": meta,
+      "/api/queue": () => (resolved ? [a, c] : [a, b, c]),
+      "/api/conversations/d-002": conversation({
+        conversation_id: "d-002",
+        player: b.player,
+        task: { ...base.task, task_id: 2 },
+      }),
+      "/api/conversations/d-003": conversation({ conversation_id: "d-003", player: c.player }),
+      "/api/tasks/2": () => {
+        resolved = true;
+        return { ...base.task, task_id: 2, status: "resolved" };
+      },
+      "/api/tasks/2/audit": [],
+    });
+    renderQueue("/queue/d-002");
+    await screen.findByRole("heading", { name: "Demo Player 002" });
+    const metaBefore = calls.filter((u) => u === "/api/meta").length;
+
+    await user.click(screen.getByRole("button", { name: "Отметить решённой" }));
+    await vi.waitFor(() => expect(screen.queryByRole("link", { name: /Demo Player 002/ })).not.toBeInTheDocument());
+    expect(calls.filter((u) => u === "/api/meta").length).toBeGreaterThan(metaBefore);
+
+    await user.keyboard("j");
+    expect(await screen.findByRole("heading", { name: "Demo Player 003" })).toBeInTheDocument();
+  });
+
+  it("keeps the filters and the open tab when the dossier opens another conversation", async () => {
+    const user = userEvent.setup();
+    serveApi(vi, {
+      "/api/meta": meta,
+      "/api/queue": (url: string) =>
+        url.includes("player=") ? [a, queueItem({ task_id: 10, conversation_id: "d-010", last_message_at: "2026-10-02T12:00:00Z" })] : [a],
+      "/api/conversations/d-001": conversation(),
+      "/api/conversations/d-010": conversation({ conversation_id: "d-010" }),
+    });
+    renderQueue("/queue/d-001?priority=P0");
+    await user.click(await screen.findByRole("tab", { name: "Игрок" }));
+    const history = await screen.findByRole("list", { name: "Переписки игрока" });
+    const older = within(history).getAllByRole("link")[1];
+    expect(older).toHaveAttribute("href", "/queue/d-010?priority=P0");
+    await user.click(older as HTMLElement);
+    expect(await screen.findByRole("tabpanel", { name: "Игрок" })).toBeInTheDocument();
+  });
+});
+

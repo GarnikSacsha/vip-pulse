@@ -40,3 +40,10 @@ export function formatWait(hours: number | null): string {
   const rest = total % 24;
   return rest ? `${days} д ${rest} ч` : `${days} д`;
 }
+
+/** "11 апреля 2023" for a calendar date ("2023-04-11"); unparsable input is returned as is. */
+export function formatDay(value: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!m) return value;
+  return `${Number(m[3])} ${MONTHS[Number(m[2]) - 1] ?? ""} ${m[1]}`;
+}

@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from app.policy.priority import Route
+from app.policy.sla import SlaLane
 from app.schemas.analysis import (
     Category,
     Priority,
@@ -43,6 +44,9 @@ class PlayerOut(BaseModel):
     display_name: str | None
     manager_id: str | None
     segment: str | None
+    # Optional profile columns; an adapter maps its source columns to these names.
+    country: str | None = None
+    registered_at: str | None = None
 
 
 class ReasonOut(BaseModel):
@@ -59,12 +63,15 @@ class QueueItem(BaseModel):
     priority: Priority
     route: Route
     category: Category | None  # None when the analysis failed
+    sentiment: Sentiment | None  # the player's tone, for the dossier trend; None when failed
     summary: str | None
     next_action: str | None
     wait_hours: float | None
     awaiting_reply: bool
     # Active work (open / in progress) whose player waits longer than the channel's SLA.
     overdue: bool
+    sla_hours: float  # the channel's response SLA under the current thresholds
+    sla_lane: SlaLane  # computed by app.policy.sla; "breached" exactly when overdue
     requires_review: bool
     quality_flags: list[str]
     reasons: list[ReasonOut]
