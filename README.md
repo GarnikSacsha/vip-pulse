@@ -8,7 +8,7 @@ conclusion points to the exact messages it is based on, and responsible-gaming c
 human specialist.
 
 > **Status:** the full path works end to end on synthetic data: import → analysis → prioritised
-> queue in the browser → conversation with evidence → status change with history. By default
+> inbox in the browser → conversation with evidence → status change with history. By default
 > analysis is done by an offline heuristic (the UI says so on every screen); Gemini is built in and
 > switched on with an API key, under a hard spending cap.
 > See [what is done and what is next](#status).
@@ -17,8 +17,8 @@ human specialist.
 
 | Role | What they get |
 |---|---|
-| **VIP manager** (primary) | "Who do I answer first and what do I say?" A queue sorted by urgency and waiting time, the reason for each priority, a suggested next step, the messages that justify it. |
-| Team lead (`/lead`) | Overdue replies, escalations, manager mistakes such as offers to vulnerable players, workload per manager with a link to their queue. |
+| **VIP manager** (primary) | "Who do I answer first and what do I say?" A three-pane inbox: the queue sorted by urgency and waiting time, the conversation, and its analysis with the reason for each priority, a suggested next step and numbered links to the messages that justify it. A player tab shows the dossier. |
+| Team lead (`/lead`) | SLA lanes (Горит / Скоро нарушится / Ждёт / Всё ок), escalations, manager mistakes such as offers to vulnerable players, workload per manager with a link to their queue. |
 | Head of VIP (`/overview`) | Headline numbers, replies within SLA, categories and channels, and where the numbers come from. Computed from the same queue, nothing hard-coded. |
 
 ## How it decides
@@ -70,16 +70,20 @@ If the console shows broken Cyrillic, run `$env:PYTHONIOENCODING = "utf-8"` firs
 
 ### What to look at
 
-1. **Queue:** three P0 items on top. A withdrawal unanswered for 27 h, a possible account
-   takeover routed to security, and a player asking to be blocked who was offered free spins
-   (flagged "Бонус уязвимому игроку").
-2. **Open d-004:** the player's message is marked as the basis of the conclusion, with a red
-   "do not offer bonuses" warning and the route to a responsible-gaming specialist.
-3. **Take an item in progress, then resolve it:** the history records who did what, with the note.
-4. **Team (`/lead`):** d-001 is the only overdue reply; d-004 and d-009 are escalations; mgr-01
+1. **Inbox (`/queue`):** three P0 items on top. A withdrawal unanswered for 27 h (its ring is
+   solid red: SLA breached), a possible account takeover routed to security, and a player asking
+   to be blocked who was offered free spins (flagged "Бонус уязвимому игроку"). Press `j` / `k`
+   to walk through the queue; the conversation and its analysis open next to the list.
+2. **Open d-004:** hover the numbered pill next to the summary: the cited message lights up in
+   the timeline. A red "do not offer bonuses" warning and the route to a responsible-gaming
+   specialist sit above. With the offline heuristic the analysis card is hatched and labelled «демо».
+3. **Open d-001, tab «Игрок»:** the dossier lists both of the player's conversations and the tone
+   trend between them.
+4. **Take an item in progress, then resolve it:** the history records who did what, with the note.
+5. **Team (`/lead`):** d-001 is in the «Горит» lane; d-004 and d-009 are escalations; mgr-01
    opens their own queue. **Overview (`/overview`):** 5 of 9 conversations need action, 3 of 4
    waiting players are inside the SLA, and the page says the categories come from the demo heuristic.
-5. **Change a threshold** in `thresholds.yaml` (for example `critical_wait_hours: 24 → 48`) and run
+6. **Change a threshold** in `thresholds.yaml` (for example `critical_wait_hours: 24 → 48`) and run
    `app.cli triage` again: priorities change, cached analyses are reused, nothing is re-sent to the model.
 
 The CLI prints the same queue the browser shows:
@@ -112,7 +116,7 @@ products ([decision 0008](docs/decisions/0008-gemini-provider-and-spending-cap.m
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/meta` | Dataset date, provider with its label and budget, counts by status and priority |
-| GET | `/api/queue?status=&priority=&route=&manager=&overdue=` | Work items, most urgent first; `overdue` = active and past the channel SLA |
+| GET | `/api/queue?status=&priority=&route=&manager=&player=&overdue=` | Work items, most urgent first; `overdue` = active and past the channel SLA; `sla_lane` per item |
 | GET | `/api/overview` | Totals, workload per manager, categories, channels, routes, analysis coverage |
 | GET | `/api/conversations/{id}` | Messages (evidence and pending marked), analysis, task, reasons, facts |
 | PATCH | `/api/tasks/{id}` | Change status (`open`, `in_progress`, `resolved`) with an optional note |
@@ -171,8 +175,9 @@ backend/app/
   cli.py        import / triage commands
 frontend/src/
   api/          typed client mirroring backend/app/api/schemas.py
-  pages/        queue, conversation, team lead, overview
-  components/   badges, tags, oversight tiles and panels
+  pages/        inbox (queue + conversation panes), team lead, overview
+  components/   badges, pulse indicator, dossier, oversight tiles and panels
+frontend/public/fonts/  self-hosted Inter Variable and JetBrains Mono (OFL)
   lib/          formatting, labels, data loading hook
 data/
   sample/       synthetic fixture, one edge case per dialog (committed)
@@ -186,12 +191,12 @@ docs/
 | Done | Next |
 |---|---|
 | Import with validation report, dedupe, idempotent re-import | Adapter for the real `dialogs.json` / `players.csv` (awaiting files) |
-| Deterministic facts, SLA, safety net, priority with reasons | Visual polish from references, screenshots |
-| Strict LLM contract, fail-closed evidence check, prompt-injection fencing | Gold set of hand-labelled conversations to measure quality |
-| Analysis cache, work items, status history | One-page brief and demo video |
-| Manager queue and conversation view in the browser | |
+| Deterministic facts, SLA, safety net, priority with reasons | Gold set of hand-labelled conversations to measure quality |
+| Strict LLM contract, fail-closed evidence check, prompt-injection fencing | Screenshots, one-page brief and demo video |
+| Analysis cache, work items, status history | |
+| Three-pane inbox, evidence pills, player dossier, pulse indicator | |
 | Gemini provider: retries, parallel calls, $1 spending cap with a ledger | |
-| Team lead and head-of-VIP views | |
+| Team lead SLA lanes and head-of-VIP view | |
 
 ## Data and secrets
 

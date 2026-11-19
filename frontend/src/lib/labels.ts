@@ -1,4 +1,4 @@
-import type { Category, Channel, Priority, Route, SenderRole, TaskStatus } from "../api/types";
+import type { Category, Channel, Priority, Route, SenderRole, Sentiment, SlaLane, TaskStatus } from "../api/types";
 
 export const PRIORITY_LABEL: Record<Priority, string> = {
   P0: "Критично",
@@ -36,6 +36,20 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
   in_progress: "В работе",
   resolved: "Решено",
   no_action: "Без действий",
+};
+
+export const SLA_LANE_LABEL: Record<SlaLane, string> = {
+  breached: "Горит",
+  at_risk: "Скоро нарушится",
+  waiting: "Ждёт",
+  ok: "Всё ок",
+};
+
+export const SENTIMENT_LABEL: Record<Sentiment, string> = {
+  positive: "позитивный",
+  neutral: "нейтральный",
+  negative: "негативный",
+  mixed: "смешанный",
 };
 
 export const SENDER_LABEL: Record<SenderRole, string> = {

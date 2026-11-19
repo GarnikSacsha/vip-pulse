@@ -8,6 +8,7 @@ sla:
   critical_wait_hours: 24    # money/verification request waiting longer than this -> P0
   channel_response_hours:    # per-channel override of response_hours
     email: 8
+  at_risk_share: 0.75        # waiting past this share of the SLA = "at risk" on the team lead board
 
 analysis:
   min_confidence: 0.5        # below this the AI result is flagged for human review

@@ -18,6 +18,8 @@ class SlaConfig(_Cfg):
     response_hours: float = Field(gt=0)
     critical_wait_hours: float = Field(gt=0)
     channel_response_hours: dict[Channel, float] = Field(default_factory=dict)
+    # Share of the SLA after which a waiting player counts as "at risk" (lane «Скоро нарушится»).
+    at_risk_share: float = Field(default=0.75, gt=0, lt=1)
 
     def response_hours_for(self, channel: Channel) -> float:
         return self.channel_response_hours.get(channel, self.response_hours)

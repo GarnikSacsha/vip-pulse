@@ -16,6 +16,16 @@ const rg = queueItem({
   wait_hours: null,
   awaiting_reply: false,
   overdue: false,
+  sla_lane: "ok",
+});
+const soon = queueItem({
+  task_id: 5,
+  conversation_id: "d-005",
+  player: { player_id: "p-005", display_name: "Demo Player 005", manager_id: "mgr-02", segment: "gold" },
+  priority: "P2",
+  wait_hours: 3.5,
+  overdue: false,
+  sla_lane: "at_risk",
 });
 
 function renderLead() {
@@ -49,15 +59,9 @@ describe("team lead page", () => {
   it("groups active items by the reason the lead must look at them", async () => {
     const calls = serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [late, rg] });
     renderLead();
-    const overdue = await screen.findByRole("region", { name: /Просрочен ответ/ });
-    expect(within(overdue).getByRole("link", { name: /Demo Player 001/ })).toHaveAttribute(
-      "href",
-      "/conversations/d-001",
-    );
-    expect(within(overdue).queryByText(/Demo Player 004/)).not.toBeInTheDocument();
-
-    const escalations = screen.getByRole("region", { name: /Эскалации/ });
-    expect(within(escalations).getByText(/Demo Player 004/)).toBeInTheDocument();
+    const escalations = await screen.findByRole("region", { name: /Эскалации/ });
+    expect(within(escalations).getByRole("link", { name: /Demo Player 004/ })).toHaveAttribute("href", "/queue/d-004");
+    expect(within(escalations).queryByText(/Demo Player 001/)).not.toBeInTheDocument();
     const quality = screen.getByRole("region", { name: /Ошибки менеджеров/ });
     expect(within(quality).getByText("Бонус уязвимому игроку")).toBeInTheDocument();
 
@@ -76,7 +80,29 @@ describe("team lead page: review fixes", () => {
   it("labels stand-in analysis in the exception lists", async () => {
     serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [late] });
     renderLead();
-    const overdue = await screen.findByRole("region", { name: /Просрочен ответ/ });
-    expect(within(overdue).getByText("демо")).toBeInTheDocument();
+    const burning = await screen.findByRole("region", { name: /Горит/ });
+    expect(within(burning).getByText("демо")).toBeInTheDocument();
+  });
+});
+
+describe("team lead page: SLA lanes", () => {
+  it("sorts active work into lanes decided by the policy", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [late, rg, soon] });
+    renderLead();
+    const board = await screen.findByRole("region", { name: "SLA по активным диалогам" });
+    const lane = (name: RegExp) => within(board).getByRole("region", { name });
+
+    const burning = lane(/^Горит/);
+    expect(burning).toHaveAccessibleName("Горит · 1");
+    expect(within(burning).getByRole("link", { name: /Demo Player 001/ })).toHaveAttribute("href", "/queue/d-001");
+    expect(burning).toHaveTextContent("просрочено на 23 ч");
+    expect(burning).toHaveTextContent("mgr-01");
+
+    const atRisk = lane(/^Скоро нарушится/);
+    expect(within(atRisk).getByText(/Demo Player 005/)).toBeInTheDocument();
+    expect(atRisk).toHaveTextContent("осталось 30 мин");
+
+    expect(lane(/^Ждёт/)).toHaveAccessibleName("Ждёт · 0");
+    expect(within(lane(/^Всё ок/)).getByText(/Demo Player 004/)).toBeInTheDocument();
   });
 });
