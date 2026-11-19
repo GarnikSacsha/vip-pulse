@@ -156,3 +156,24 @@ def test_cli_import(tmp_path: Path, sample_paths, capsys) -> None:
     out = capsys.readouterr().out
     assert "conversations:  9 kept / 11 read" in out
     assert "conversations +0 ~9" in out  # second run updated, created nothing
+
+
+def test_cli_triage_prints_sorted_queue(tmp_path: Path, sample_paths, capsys) -> None:
+    db_url = f"sqlite:///{(tmp_path / 'triage.db').as_posix()}"
+    imp = ["import", "--players", str(sample_paths[0]), "--dialogs", str(sample_paths[1])]
+    assert main([*imp, "--database-url", db_url]) == 0
+    capsys.readouterr()
+
+    assert main(["triage", "--database-url", db_url]) == 0
+    lines = [
+        ln for ln in capsys.readouterr().out.splitlines() if ln[:2] in {"P0", "P1", "P2", "P3"}
+    ]
+    assert len(lines) == 9
+    assert [ln[:2] for ln in lines] == sorted(ln[:2] for ln in lines)
+    assert "[offer_to_vulnerable_player]" in "\n".join(lines)
+
+
+def test_cli_triage_on_empty_db(tmp_path: Path, capsys) -> None:
+    db_url = f"sqlite:///{(tmp_path / 'empty.db').as_posix()}"
+    assert main(["triage", "--database-url", db_url]) == 1
+    assert "run `import` first" in capsys.readouterr().err

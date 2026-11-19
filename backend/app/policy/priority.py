@@ -140,7 +140,10 @@ def decide(
     if suppress_offers and (next_action is None or contains_any(next_action, cfg.offers)):
         if next_action is not None:
             reasons.append(
-                Reason(code="guard.offer_removed", text="Предложение бонуса убрано из совета")
+                Reason(
+                    code="guard.offer_removed",
+                    text="Совет упоминал бонусы и заменён безопасным шаблоном",
+                )
             )
         next_action = SAFE_RG_ACTION
     elif route == Route.SECURITY and next_action is None:
