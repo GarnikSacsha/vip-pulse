@@ -1,0 +1,62 @@
+# Policy thresholds. ILLUSTRATIVE DEFAULTS, not company rules:
+# the task gives no evaluation rules, so these are explicit assumptions to tune with the VIP team.
+# Change a number here and re-run analysis: no code or prompt changes needed.
+
+sla:
+  # A player is "waiting" when the last non-system message in the conversation is theirs.
+  response_hours: 4          # waiting longer than this = SLA breach -> at least P1
+  critical_wait_hours: 24    # money/verification request waiting longer than this -> P0
+  channel_response_hours:    # per-channel override of response_hours
+    email: 8
+
+analysis:
+  min_confidence: 0.5        # below this the AI result is flagged for human review
+
+# Deterministic safety net. Runs on player messages even when the LLM is down or misses a signal.
+# Lowercase substrings; matched against lowercased text.
+safety:
+  responsible_gaming:
+    - самоисключ
+    - заблокируйте меня
+    - закрыть аккаунт
+    - не могу остановиться
+    - не могу перестать
+    - зависимост
+    - лудоман
+    - проиграл все
+    - проиграл всё
+    - self-exclu
+    - block my account
+    - close my account
+    - can't stop
+    - cannot stop
+    - gambling problem
+    - addicted
+  fraud_security:
+    - это был не я
+    - это не я
+    - взлом
+    - не я входил
+    - украли
+    - мошенни
+    - hacked
+    - "wasn't me"
+    - was not me
+    - unauthorized
+    - stolen
+
+# Words that make a message a promotional offer. Offers are never suggested to players with a
+# responsible-gaming signal, and a manager sending one is flagged as a quality issue.
+offers:
+  - бонус
+  - фриспин
+  - фри спин
+  - кэшбэк
+  - кешбек
+  - промокод
+  - отыграться
+  - bonus
+  - free spin
+  - freespin
+  - cashback
+  - promo
