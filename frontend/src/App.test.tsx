@@ -63,6 +63,7 @@ describe("app shell", () => {
   it("explains when the API is unreachable", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("down", { status: 502 }));
     renderAt("/queue");
-    expect(await screen.findByRole("alert")).toHaveTextContent("Сервер недоступен (502)");
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts[0]).toHaveTextContent("Сервер недоступен (502)");
   });
 });

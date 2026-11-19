@@ -1,6 +1,7 @@
 import { NavLink, Navigate, Outlet, Route, Routes } from "react-router";
 import { api } from "./api/client";
 import { formatDateTime } from "./lib/format";
+import { QueuePage, type ShellContext } from "./pages/QueuePage";
 import { useApi } from "./lib/useApi";
 
 function Shell() {
@@ -49,7 +50,7 @@ function Shell() {
       )}
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        <Outlet />
+        <Outlet context={{ meta: meta.data } satisfies ShellContext} />
       </main>
     </div>
   );
@@ -60,7 +61,7 @@ export function AppRoutes() {
     <Routes>
       <Route element={<Shell />}>
         <Route index element={<Navigate to="/queue" replace />} />
-        <Route path="queue" element={null} />
+        <Route path="queue" element={<QueuePage />} />
       </Route>
     </Routes>
   );
