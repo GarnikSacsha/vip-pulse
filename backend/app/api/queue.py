@@ -20,8 +20,8 @@ from app.api.schemas import (
     ProviderInfo,
     QueueItem,
     ReasonOut,
-    TaskOut,
 )
+from app.api.tasks import task_out as to_task_out
 from app.ingestion.store import load_conversation
 from app.models import AnalysisRow, ConversationRow, PlayerRow, TaskRow
 from app.policy.config import PolicyConfig
@@ -90,6 +90,17 @@ def queue(
     priority: Annotated[list[Priority] | None, Query()] = None,
     route: Annotated[list[Route] | None, Query()] = None,
 ) -> list[QueueItem]:
+    return list_queue(session, status=status, priority=priority, route=route)
+
+
+def list_queue(
+    session: Session,
+    *,
+    status: list[TaskStatus] | None = None,
+    priority: list[Priority] | None = None,
+    route: list[Route] | None = None,
+) -> list[QueueItem]:
+    """The work queue, shared by the API and the CLI."""
     query = (
         select(TaskRow, ConversationRow, PlayerRow, AnalysisRow)
         .join(ConversationRow, ConversationRow.conversation_id == TaskRow.conversation_id)
@@ -174,21 +185,7 @@ def conversation_detail(
             message=None if ok else FAILED_ANALYSIS_MESSAGE,
         )
 
-    task_out = None
-    if task is not None:
-        task_out = TaskOut(
-            task_id=task.id,
-            status=task.status,
-            priority=task.priority,
-            route=task.route,
-            next_action=task.next_action,
-            reasons=[ReasonOut(**r) for r in task.reasons],
-            quality_flags=task.quality_flags,
-            requires_review=task.requires_review,
-            suppress_offers=task.suppress_offers,
-            updated_at=task.updated_at,
-            resolved_at=task.resolved_at,
-        )
+    task_out = to_task_out(task) if task is not None else None
 
     return ConversationDetail(
         conversation_id=conv.conversation_id,

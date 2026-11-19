@@ -138,3 +138,65 @@ def test_empty_database_gives_empty_queue() -> None:
         meta = c.get("/api/meta").json()
         assert meta["as_of"] is None
         assert meta["counts"]["total"] == 0
+
+
+# --- writes ---------------------------------------------------------------------------------
+
+
+def _task_id(client: TestClient, conversation_id: str) -> int:
+    return client.get(f"/api/conversations/{conversation_id}").json()["task"]["task_id"]
+
+
+def test_status_change_is_saved_and_audited(client: TestClient) -> None:
+    task_id = _task_id(client, "d-001")
+    response = client.patch(
+        f"/api/tasks/{task_id}",
+        json={"status": "in_progress", "actor": "demo-manager", "note": "Пишу в платёжный отдел"},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "in_progress"
+    assert client.get("/api/conversations/d-001").json()["task"]["status"] == "in_progress"
+
+    audit = client.get(f"/api/tasks/{task_id}/audit").json()
+    assert [(a["action"], a["before"], a["after"], a["actor"]) for a in audit] == [
+        ("status_changed", "open", "in_progress", "demo-manager")
+    ]
+    assert audit[0]["note"] == "Пишу в платёжный отдел"
+
+
+def test_invalid_transition_is_409(client: TestClient) -> None:
+    task_id = _task_id(client, "d-002")  # no_action
+    response = client.patch(f"/api/tasks/{task_id}", json={"status": "resolved"})
+    assert response.status_code == 409
+    assert response.json() == {"detail": "cannot move a task from no_action to resolved"}
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"status": "deleted"},
+        {"status": "open", "note": "x" * 501},
+        {"status": "open", "actor": ""},
+        {"status": "open", "unexpected": True},
+    ],
+)
+def test_invalid_payload_is_422(client: TestClient, payload: dict) -> None:
+    task_id = _task_id(client, "d-001")
+    assert client.patch(f"/api/tasks/{task_id}", json=payload).status_code == 422
+
+
+def test_unknown_task_is_404(client: TestClient) -> None:
+    assert client.patch("/api/tasks/999", json={"status": "open"}).status_code == 404
+    assert client.get("/api/tasks/999/audit").status_code == 404
+
+
+def test_triage_can_be_rerun_from_the_api(client: TestClient) -> None:
+    body = client.post("/api/triage/run").json()
+    assert body == {
+        "analysed": 0,
+        "reused": 9,
+        "failed": 0,
+        "created": 0,
+        "updated": 9,
+        "reopened": 0,
+    }

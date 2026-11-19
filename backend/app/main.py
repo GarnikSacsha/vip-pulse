@@ -9,7 +9,7 @@ from sqlalchemy import Engine
 
 from app import __version__
 from app.analysis.llm import LLMProvider, get_provider
-from app.api import health, queue
+from app.api import health, queue, tasks
 from app.config import get_settings
 from app.db import init_db, make_engine
 from app.policy.config import PolicyConfig
@@ -28,4 +28,5 @@ def create_app(
     init_db(app.state.engine)
     app.include_router(health.router)
     app.include_router(queue.router)
+    app.include_router(tasks.router)
     return app
