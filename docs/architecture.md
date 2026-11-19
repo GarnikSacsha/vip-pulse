@@ -89,4 +89,6 @@ Full records with evidence and rejected alternatives are in [`docs/decisions/`](
    API, manager queue and conversation view.
 3. **Next — stage 2b:** real data adapter + data contract, Gemini provider (retries, bounded
    concurrency, cost cap).
-4. **Then:** team lead and head-of-VIP views, gold set evaluation, one-page brief, demo.
+4. **Stage 2c (oversight views):** `/api/overview` and the team lead / head-of-VIP pages, computed
+   from the same queue the managers see.
+5. **Then:** gold set evaluation, visual polish, one-page brief, demo.
