@@ -86,6 +86,7 @@ class SampleV1Adapter:
         except json.JSONDecodeError as exc:
             self._issue(out, IssueLevel.ERROR, "dialogs", path.name, f"invalid JSON: {exc}")
             return
+        payload = self._prepare(payload, path, out)
         dialogs = payload.get("dialogs") if isinstance(payload, dict) else payload
         if not isinstance(dialogs, list):
             self._issue(
@@ -101,6 +102,10 @@ class SampleV1Adapter:
             conversation = self._parse_dialog(raw, index, out)
             if conversation is not None:
                 out.conversations.append(conversation)
+
+    def _prepare(self, payload: Any, path: Path, out: ParsedSource) -> Any:
+        """Hook for formats that differ only in field names: map them to this shape."""
+        return payload
 
     def _parse_dialog(self, raw: Any, index: int, out: ParsedSource) -> Conversation | None:
         if not isinstance(raw, dict):

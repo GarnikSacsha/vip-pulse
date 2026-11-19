@@ -68,6 +68,16 @@ Open <http://localhost:5173>. Vite proxies `/api` to the backend.
 macOS / Linux: the same steps with `python3 -m venv .venv` and `.venv/bin/python`.
 If the console shows broken Cyrillic, run `$env:PYTHONIOENCODING = "utf-8"` first.
 
+### Task files
+
+The task files go to `data/input/` (git-ignored, never committed). Import them with the `task_v1`
+adapter into a separate database ([decision 0010](docs/decisions/0010-task-data-adapter.md)):
+
+```powershell
+.\.venv\Scripts\python.exe -m app.cli import --adapter task_v1 --players ..\data\input\players.csv --dialogs ..\data\input\dialogs.json --database-url sqlite:///./task_data.db
+.\.venv\Scripts\python.exe -m app.cli triage --database-url sqlite:///./task_data.db
+```
+
 ### What to look at
 
 1. **Queue:** three P0 items on top. A withdrawal unanswered for 27 h, a possible account
