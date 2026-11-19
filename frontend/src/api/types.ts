@@ -5,6 +5,9 @@ export type TaskStatus = "open" | "in_progress" | "resolved" | "no_action";
 export type Route = "manager" | "rg_specialist" | "security";
 export type Channel = "telegram" | "whatsapp" | "email" | "other";
 export type SenderRole = "player" | "manager" | "system";
+/** Mirrors backend/app/policy/sla.py: decided by thresholds, never by the model. */
+export type SlaLane = "breached" | "at_risk" | "waiting" | "ok";
+export type Sentiment = "positive" | "neutral" | "negative" | "mixed";
 export type Category =
   | "withdrawal"
   | "deposit"
@@ -39,6 +42,8 @@ export interface Player {
   display_name: string | null;
   manager_id: string | null;
   segment: string | null;
+  country?: string | null;
+  registered_at?: string | null;
 }
 
 export interface Reason {
@@ -55,12 +60,17 @@ export interface QueueItem {
   priority: Priority;
   route: Route;
   category: Category | null;
+  sentiment: Sentiment | null;
   summary: string | null;
   next_action: string | null;
   wait_hours: number | null;
   awaiting_reply: boolean;
   /** Active work whose player waits longer than the channel's SLA. */
   overdue: boolean;
+  /** The channel's response SLA under the current thresholds. */
+  sla_hours: number;
+  /** "breached" exactly when overdue. */
+  sla_lane: SlaLane;
   requires_review: boolean;
   quality_flags: string[];
   reasons: Reason[];
@@ -80,7 +90,7 @@ export interface MessageOut {
 export interface AnalysisOut {
   status: "ok" | "failed";
   category: Category | null;
-  sentiment: "positive" | "neutral" | "negative" | "mixed" | null;
+  sentiment: Sentiment | null;
   urgency: "low" | "medium" | "high" | null;
   summary: string | null;
   confidence: number | null;
@@ -137,6 +147,7 @@ export interface QueueFilters {
   priority?: Priority[];
   route?: Route[];
   manager?: string[];
+  player?: string[];
   overdue?: boolean;
 }
 

@@ -76,7 +76,7 @@ export function CompactItem({ item }: { item: QueueItem }) {
   const name = item.player.display_name ?? item.player.player_id;
   return (
     <Link
-      to={`/conversations/${item.conversation_id}`}
+      to={`/queue/${item.conversation_id}`}
       className="flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-canvas"
     >
       <PriorityBadge priority={item.priority} />

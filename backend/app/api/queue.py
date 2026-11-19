@@ -28,6 +28,7 @@ from app.models import AnalysisRow, ConversationRow, PlayerRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.policy.facts import compute_facts
 from app.policy.priority import LABEL_MODEL, LABEL_SIMULATED, Route
+from app.policy.sla import sla_lane
 from app.schemas.analysis import Priority, ProcessingStatus
 from app.tasks.service import TaskStatus, ledger_spent
 
@@ -51,6 +52,8 @@ def _player(row: PlayerRow) -> PlayerOut:
         display_name=row.display_name,
         manager_id=row.manager_id,
         segment=row.segment,
+        country=row.attributes.get("country") if row.attributes else None,
+        registered_at=row.attributes.get("registered_at") if row.attributes else None,
     )
 
 
@@ -90,18 +93,22 @@ def meta(session: SessionDep, provider: Annotated[LLMProvider, Depends(get_provi
 @router.get("/queue", response_model=list[QueueItem])
 def queue(
     session: SessionDep,
+    policy: Annotated[PolicyConfig, Depends(get_policy)],
     status: Annotated[list[TaskStatus] | None, Query()] = None,
     priority: Annotated[list[Priority] | None, Query()] = None,
     route: Annotated[list[Route] | None, Query()] = None,
     manager: Annotated[list[str] | None, Query(max_length=64)] = None,
+    player: Annotated[list[str] | None, Query(max_length=64)] = None,
     overdue: bool | None = None,
 ) -> list[QueueItem]:
     return list_queue(
         session,
+        policy=policy,
         status=status,
         priority=priority,
         route=route,
         manager=manager,
+        player=player,
         overdue=overdue,
     )
 
@@ -124,13 +131,16 @@ def is_overdue(task: TaskRow) -> bool:
 def list_queue(
     session: Session,
     *,
+    policy: PolicyConfig,
     status: list[TaskStatus] | None = None,
     priority: list[Priority] | None = None,
     route: list[Route] | None = None,
     manager: list[str] | None = None,
+    player: list[str] | None = None,
     overdue: bool | None = None,
 ) -> list[QueueItem]:
     """The work queue, shared by the API, the oversight views and the CLI."""
+    sla = policy.sla
     query = (
         select(TaskRow, ConversationRow, PlayerRow, AnalysisRow)
         .join(ConversationRow, ConversationRow.conversation_id == TaskRow.conversation_id)
@@ -145,6 +155,8 @@ def list_queue(
         query = query.where(TaskRow.route.in_([r.value for r in route]))
     if manager:
         query = query.where(PlayerRow.manager_id.in_(manager))
+    if player:
+        query = query.where(PlayerRow.player_id.in_(player))
     # Most urgent first; within a priority, the longest wait first.
     query = query.order_by(
         TaskRow.priority, TaskRow.wait_hours.desc().nulls_last(), TaskRow.conversation_id
@@ -156,6 +168,7 @@ def list_queue(
         if overdue is not None and late != overdue:
             continue
         result = _result(analysis)
+        sla_hours = sla.response_hours_for(conv.channel)
         items.append(
             QueueItem(
                 task_id=task.id,
@@ -166,11 +179,21 @@ def list_queue(
                 priority=task.priority,
                 route=task.route,
                 category=result.get("category"),
+                sentiment=result.get("sentiment"),
                 summary=result.get("summary"),
                 next_action=task.next_action,
                 wait_hours=task.wait_hours if task.awaiting_reply else None,
                 awaiting_reply=task.awaiting_reply,
                 overdue=late,
+                sla_hours=sla_hours,
+                sla_lane=sla_lane(
+                    active=TaskStatus(task.status) in ACTIVE,
+                    awaiting_reply=task.awaiting_reply,
+                    wait_hours=task.wait_hours,
+                    sla_hours=sla_hours,
+                    breached=late,
+                    at_risk_share=sla.at_risk_share,
+                ),
                 requires_review=task.requires_review,
                 quality_flags=task.quality_flags,
                 reasons=[ReasonOut(**r) for r in task.reasons],

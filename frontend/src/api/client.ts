@@ -39,7 +39,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 function queryString(filters: QueueFilters): string {
   const params = new URLSearchParams();
-  for (const key of ["status", "priority", "route", "manager"] as const) {
+  for (const key of ["status", "priority", "route", "manager", "player"] as const) {
     for (const value of filters[key] ?? []) params.append(key, value);
   }
   if (filters.overdue !== undefined) params.set("overdue", String(filters.overdue));
