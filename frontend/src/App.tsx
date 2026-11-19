@@ -1,7 +1,7 @@
-import { NavLink, Navigate, Outlet, Route, Routes } from "react-router";
+import { NavLink, Navigate, Outlet, Route, Routes, useParams } from "react-router";
 import { api } from "./api/client";
 import { formatDateTime } from "./lib/format";
-import { ConversationPage } from "./pages/ConversationPage";
+import { ConversationPane, NoConversation } from "./pages/ConversationPage";
 import { LeadPage } from "./pages/LeadPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { QueuePage, type ShellContext } from "./pages/QueuePage";
@@ -17,11 +17,14 @@ function Shell() {
   const meta = useApi(() => api.meta(), "meta");
 
   return (
-    <div className="min-h-screen bg-canvas text-ink">
-      <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
+    // On wide screens the shell fills the viewport and each pane scrolls on its own.
+    <div className="flex min-h-screen flex-col bg-canvas text-ink lg:h-screen">
+      <header className="shrink-0 border-b border-line bg-surface">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
           <div className="flex items-baseline gap-2">
-            <span className="text-[15px] font-semibold tracking-tight">VIP Pulse</span>
+            <span className="text-[15px] font-semibold tracking-tight">
+              VIP Pulse
+            </span>
             <span className="hidden text-sm text-muted sm:inline">разбор переписок VIP-отдела</span>
           </div>
           <nav aria-label="Разделы" className="flex gap-1 text-sm">
@@ -45,16 +48,16 @@ function Shell() {
       </header>
 
       {meta.error && (
-        <div role="alert" className="border-b border-danger-line bg-danger-soft">
-          <p className="mx-auto max-w-6xl px-4 py-2 text-sm text-danger sm:px-6">
+        <div role="alert" className="shrink-0 border-b border-danger-line bg-danger-soft">
+          <p className="px-4 py-2 text-sm text-danger sm:px-6">
             {meta.error}. Запустите API: <code className="font-mono">uvicorn app.main:create_app --factory</code>
           </p>
         </div>
       )}
 
       {meta.data?.provider.simulated && (
-        <div role="status" className="border-b border-warn-line bg-warn-soft">
-          <p className="mx-auto max-w-6xl px-4 py-2 text-sm text-warn sm:px-6">
+        <div role="status" className="hatch shrink-0 border-b border-warn-line bg-warn-soft">
+          <p className="px-4 py-2 text-sm text-warn sm:px-6">
             <strong className="font-medium">Демо-режим.</strong> Разбор переписок выполняет{" "}
             {meta.data.provider.label}: категории и советы ниже — заглушка для проверки интерфейса,
             а не вывод языковой модели.
@@ -62,11 +65,26 @@ function Shell() {
         </div>
       )}
 
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <main className="flex-1 lg:min-h-0 lg:overflow-y-auto">
         <Outlet context={{ meta: meta.data } satisfies ShellContext} />
       </main>
     </div>
   );
+}
+
+/** Oversight pages: centred, document-style. */
+function Contained() {
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <Outlet />
+    </div>
+  );
+}
+
+/** Old /conversations/:id links (bookmarks, earlier builds) open in the inbox. */
+function ToInbox() {
+  const { id = "" } = useParams();
+  return <Navigate to={`/queue/${encodeURIComponent(id)}`} replace />;
 }
 
 export function AppRoutes() {
@@ -74,10 +92,15 @@ export function AppRoutes() {
     <Routes>
       <Route element={<Shell />}>
         <Route index element={<Navigate to="/queue" replace />} />
-        <Route path="queue" element={<QueuePage />} />
-        <Route path="conversations/:id" element={<ConversationPage />} />
-        <Route path="lead" element={<LeadPage />} />
-        <Route path="overview" element={<OverviewPage />} />
+        <Route path="queue" element={<QueuePage />}>
+          <Route index element={<NoConversation />} />
+          <Route path=":id" element={<ConversationPane />} />
+        </Route>
+        <Route path="conversations/:id" element={<ToInbox />} />
+        <Route element={<Contained />}>
+          <Route path="lead" element={<LeadPage />} />
+          <Route path="overview" element={<OverviewPage />} />
+        </Route>
       </Route>
     </Routes>
   );
