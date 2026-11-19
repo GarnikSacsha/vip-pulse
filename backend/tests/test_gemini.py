@@ -212,7 +212,9 @@ def test_gemini_is_built_from_settings_with_budget() -> None:
     assert isinstance(provider, GeminiProvider)
     assert provider.simulated is False
     assert provider.meter.limit_usd == 0.5
-    assert provider.model == "gemini-2.5-flash"
+    # gemini-2.5-flash is closed to new users (HTTP 404, 2026-11-19).
+    assert provider.model == "gemini-3.8-flash"
+    assert (provider.pricing.input_per_million, provider.pricing.output_per_million) == (0.75, 3.75)
 
 
 # --- review fixes: reservations, unsent requests, permanent failures ------------------------

@@ -13,10 +13,16 @@ decision.
 
 ## Evidence
 
-- Paid-tier list prices of `gemini-2.5-flash` (Gemini pricing page, checked 2026-11-19):
-  $0.30 per 1M input tokens, $2.50 per 1M output tokens (thinking tokens included).
-- One conversation costs roughly 1.5k input and ~300 output tokens: about $0.001. 250
-  conversations come to about $0.25, with thinking off.
+- `gemini-2.5-flash` answers HTTP 404 "no longer available to new users" and points to
+  `gemini-3.8-flash`, which is the default model now. A key on the free tier gets HTTP 429 (no
+  quota) for it: billing must be enabled.
+- Paid-tier list prices of `gemini-3.8-flash` (Gemini pricing page, checked 2026-11-19):
+  $0.75 per 1M input tokens, $3.75 per 1M output tokens (thinking included) until 2026-12-31,
+  doubled from 2027-01-01.
+- First live run (synthetic sample, 9 conversations, thinking off): ~600 input and ~150 output
+  tokens per conversation, $0.0091 in total, 12 s, all answers passed schema and evidence
+  validation. 250 conversations come to about $0.25. The worst-case reservation (~$0.009 per
+  call) is ~9× the real cost, as intended.
 - The same pricing page says that on the **free tier content is used to improve Google's
   products**, and on the paid tier it is not.
 
