@@ -100,3 +100,20 @@ def mentions_offer(text: str, words: tuple[str, ...]) -> bool:
                 return True
             start = lowered.find(word, start + 1)
     return False
+
+
+# "нет второго аккаунта", "not another account": a denial right before the phrase.
+_DENIAL = re.compile(r"(?:^|\W)(?:нет|не|ни|без|no|not|never|without)\W+$")
+
+
+def mentions_phrase(text: str, phrases: tuple[str, ...]) -> bool:
+    """True when a phrase starts at a word boundary and is not denied right before it."""
+    lowered = text.lower()
+    for phrase in phrases:
+        start = lowered.find(phrase)
+        while start != -1:
+            boundary = start == 0 or not lowered[start - 1].isalnum()
+            if boundary and not _DENIAL.search(lowered[max(0, start - 20) : start]):
+                return True
+            start = lowered.find(phrase, start + 1)
+    return False

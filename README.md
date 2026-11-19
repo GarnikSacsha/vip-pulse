@@ -168,8 +168,9 @@ $0.052, 40/40 valid answers.
 - **Personal-contact alert:** a request for a bonus on another account paid with the same card
   (possible multi-accounting) now raises «Связаться лично» (P1); the model alone gave it a low
   priority.
-- **Who to win back:** 16 players, 4 urgent (no login for 2–4 weeks or stopped depositing; two of
-  them were never contacted), 5 with a sharp deposit drop, 7 active VIPs never contacted.
+- **Who to win back:** 14 players, 4 urgent (no login for 2–4 weeks or stopped depositing; two of
+  them have no conversation yet), 5 with a sharp deposit drop, 5 active VIPs never contacted. Two
+  players with a sharp deposit rise are left out: that is a harm-risk signal, not a reason for promo.
 
 ## Measuring analysis quality
 

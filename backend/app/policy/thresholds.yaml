@@ -64,15 +64,24 @@ safety:
     - аккаунт друга
     - аккаунт брата
     - аккаунт сестры
+    - акк жены
+    - акк мужа
+    - акк друга
+    - акк брата
+    - карта жены
+    - карты жены
+    - карту жены
+    - карта мужа
+    - карты мужа
+    - карту мужа
     - той же карт
     - та же карта
-    - одну карту
-    - одной карты
     - another account
     - second account
     - other account
     - same card
-    - one card
+    - wife's card
+    - husband's card
 
 # Signals from the player's profile (players.csv columns kept by the adapter). Missing columns
 # give no signal. All of this is decided in code; the LLM never sees it.

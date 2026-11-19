@@ -129,7 +129,7 @@ function WinbackCard({ item }: { item: WinbackItem }) {
         </dd>
         <dt>Последний вход</dt>
         <dd className="tabular-nums">{item.last_login_days === null ? "—" : `${item.last_login_days} дн. назад`}</dd>
-        <dt>Контакт</dt>
+        <dt>Последняя переписка</dt>
         <dd className="tabular-nums">
           {item.last_contact_days === null ? "Переписок ещё не было" : `${item.last_contact_days} дн. назад`}
         </dd>

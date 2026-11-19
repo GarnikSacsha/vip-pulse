@@ -31,7 +31,7 @@ def test_silent_player_who_stopped_depositing_is_urgent() -> None:
     texts = [r.text for r in item.reasons]
     assert "Не заходил 26 дн." in texts
     assert "Перестал вносить депозиты: было $9 000 за 30 дней" in texts
-    assert "Менеджер ещё не писал игроку" in texts
+    assert "Переписок с игроком ещё не было" in texts
     assert "Demo Slot" in item.next_action
     assert "бонус" not in item.next_action.lower() or "только если" in item.next_action
 
@@ -84,3 +84,23 @@ def test_order_urgent_first_then_by_value() -> None:
     )
     items = winback([small, intro, big], {}, AS_OF, CFG)
     assert [i.player.player_id for i in items] == ["b", "s", "i"]
+
+
+def test_players_with_a_risk_signal_are_never_listed() -> None:
+    p = _player("r", last_login_at="2025-12-01", deposits_30d_usd="0", deposits_prev_30d_usd="9000")
+    assert winback([p], {}, AS_OF, CFG, excluded={"r"}) == []
+
+
+def test_deposit_spike_is_not_an_introduction() -> None:
+    p = _player(
+        "x", last_login_at="2026-01-30", deposits_30d_usd="4900", deposits_prev_30d_usd="800"
+    )
+    assert winback([p], {}, AS_OF, CFG) == []
+
+
+def test_never_contacted_reason_names_the_conversation_not_the_manager() -> None:
+    p = _player(
+        "n", last_login_at="2026-01-30", deposits_30d_usd="3000", deposits_prev_30d_usd="2900"
+    )
+    [item] = winback([p], {}, AS_OF, CFG)
+    assert [r.text for r in item.reasons] == ["Переписок с игроком ещё не было"]

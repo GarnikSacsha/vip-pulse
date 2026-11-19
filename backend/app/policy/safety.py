@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from app.policy.config import PolicyConfig, contains_any, mentions_offer
+from app.policy.config import PolicyConfig, contains_any, mentions_offer, mentions_phrase
 from app.schemas.analysis import SafetyFlag
 from app.schemas.domain import Conversation, SenderRole
 
@@ -40,7 +40,7 @@ def detect_safety(conv: Conversation, cfg: PolicyConfig) -> SafetySignal:
     multi: list[str] = []
     for message in conv.messages:
         if message.sender_role == SenderRole.PLAYER:
-            if contains_any(message.text, cfg.safety.multi_account):
+            if mentions_phrase(message.text, cfg.safety.multi_account):
                 multi.append(message.message_id)
             if contains_any(message.text, cfg.safety.responsible_gaming):
                 rg_ids.append(message.message_id)

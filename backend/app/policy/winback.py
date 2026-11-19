@@ -60,14 +60,16 @@ def winback(
     last_contact: dict[str, datetime],
     as_of: datetime,
     cfg: PolicyConfig,
+    excluded: set[str] | frozenset[str] = frozenset(),
 ) -> list[WinbackItem]:
+    """`excluded`: players with a risk signal in their conversations (e.g. responsible gaming)."""
     rules = cfg.winback
     today = as_of.date()
     items: list[WinbackItem] = []
     for player in players:
         attrs = player.attributes
         status = str(attrs.get("account_status") or "").strip().lower()
-        if status in cfg.player.restricted_statuses:
+        if status in cfg.player.restricted_statuses or player.player_id in excluded:
             continue
 
         reasons: list[Reason] = []
@@ -81,6 +83,8 @@ def winback(
 
         now = _number(attrs.get("deposits_30d_usd"))
         before = _number(attrs.get("deposits_prev_30d_usd"))
+        if now is not None and before and now >= before * cfg.player.deposit_spike_ratio:
+            continue  # a sharp rise is a harm-risk signal, not a reason to reach out with promo
         if now is not None and before:
             if now == 0:
                 reasons.append(
@@ -102,7 +106,9 @@ def winback(
         contact = last_contact.get(player.player_id)
         contact_days = (today - contact.date()).days if contact else None
         if contact is None:
-            reasons.append(Reason(code="winback.no_contact", text="Менеджер ещё не писал игроку"))
+            reasons.append(
+                Reason(code="winback.no_contact", text="Переписок с игроком ещё не было")
+            )
             tier = tier or Tier.INTRODUCE
         elif contact_days is not None and contact_days >= rules.no_contact_days and tier:
             reasons.append(

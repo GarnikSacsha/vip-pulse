@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.api.deps import get_policy
 from app.api.queue import SessionDep, _as_of, _player
 from app.api.schemas import ReasonOut, WinbackOut
-from app.models import ConversationRow, PlayerRow
+from app.models import ConversationRow, PlayerRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.policy.winback import winback
 from app.schemas.domain import Player
@@ -43,6 +43,17 @@ def list_winback(
         if player_id not in last or at > last[player_id]:
             last[player_id], latest_id[player_id] = at, conv_id
 
+    # Players with a risk signal in any conversation are never offered for win-back.
+    risky = {"safety.responsible_gaming", "player.deposit_spike"}
+    excluded = set()
+    for player_id, route, reasons in session.execute(
+        select(ConversationRow.player_id, TaskRow.route, TaskRow.reasons).join(
+            TaskRow, TaskRow.conversation_id == ConversationRow.conversation_id
+        )
+    ):
+        if route == "rg_specialist" or any(r.get("code") in risky for r in reasons or []):
+            excluded.add(player_id)
+
     players = [
         Player(
             player_id=r.player_id,
@@ -66,5 +77,5 @@ def list_winback(
             favorite_game=(rows[item.player.player_id].attributes or {}).get("favorite_game"),
             latest_conversation_id=latest_id.get(item.player.player_id),
         )
-        for item in winback(players, last, as_of, policy)
+        for item in winback(players, last, as_of, policy, excluded=excluded)
     ]

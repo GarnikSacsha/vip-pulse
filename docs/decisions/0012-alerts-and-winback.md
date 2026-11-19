@@ -26,6 +26,16 @@ and 10 of 50 players had no conversation at all, so the queue never showed them.
 
 ## Consequences
 
-- On the task files: 1 alert, 16 players to win back (4 urgent, 5 attention, 7 introduce).
+- On the task files: 1 alert, 14 players to win back (4 urgent, 5 attention, 5 introduce).
+
+## Independent review (2026-11-19)
+
+No critical. Fixed with tests: (high) players with a responsible-gaming signal in any conversation
+or a deposit spike are never offered for win-back; (medium) the alert's next step no longer
+contains an offer word, so the offer guard does not replace it for a restricted player; (medium)
+a sharp deposit rise excludes the player from «познакомиться». Low, fixed: phrases match at a
+word start and not after a denial («нет второго аккаунта»); a relative's card or account is
+caught; no alert when a specialist or security owns the case; «Переписок ещё не было» instead of
+«менеджер не писал». Accepted: an alert stays until the task is closed.
 - Keywords are a safety net: new wording needs new entries. A model field for bonus abuse,
   checked by code, is the next step.

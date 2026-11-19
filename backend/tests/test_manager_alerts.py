@@ -90,3 +90,50 @@ def test_lane_is_ok_when_no_reply_is_needed() -> None:
         reply_needed=False,
     )
     assert lane == SlaLane.OK
+
+
+# --- review fixes ----------------------------------------------------------------------------
+
+
+def test_restricted_player_keeps_the_alert_step_without_a_false_guard() -> None:
+    from app.policy.player import player_signals
+    from app.schemas.domain import Player
+
+    conv = _conv((SenderRole.PLAYER, "Можно бонус на второй аккаунт?"))
+    player = Player(player_id="p", attributes={"account_status": "limit_set"})
+    facts = compute_facts(conv, conv.last_message_at, CFG.sla)
+    d = decide(
+        facts,
+        _analysis(),
+        detect_safety(conv, CFG),
+        CFG,
+        simulated=False,
+        player=player_signals(player, conv, CFG),
+    )
+    assert d.next_action == SAFE_MULTI_ACCOUNT_ACTION
+    assert "guard.offer_removed" not in [r.code for r in d.reasons]
+
+
+def test_no_alert_when_a_specialist_already_owns_the_case() -> None:
+    conv = _conv((SenderRole.PLAYER, "Заблокируйте меня. И второй аккаунт тоже закройте"))
+    d = _decide(conv)
+    assert d.route == Route.RG_SPECIALIST
+    assert "alert.multi_account" not in [r.code for r in d.reasons]
+
+
+def test_denials_and_unrelated_words_do_not_alert() -> None:
+    for text in (
+        "У меня нет второго аккаунта",
+        "Ни одной карты не проходит",
+        "Paid with a phone card",
+    ):
+        assert "alert.multi_account" not in [
+            r.code for r in _decide(_conv((SenderRole.PLAYER, text))).reasons
+        ], text
+
+
+def test_card_of_a_relative_alerts() -> None:
+    for text in ("Пополню с карты жены", "Можно на акк брата?"):
+        assert "alert.multi_account" in [
+            r.code for r in _decide(_conv((SenderRole.PLAYER, text))).reasons
+        ], text
