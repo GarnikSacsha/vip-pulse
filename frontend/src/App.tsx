@@ -66,7 +66,7 @@ function Shell() {
       )}
 
       <main className="flex-1 lg:min-h-0 lg:overflow-y-auto">
-        <Outlet context={{ meta: meta.data } satisfies ShellContext} />
+        <Outlet context={{ meta: meta.data, reloadMeta: meta.reload } satisfies ShellContext} />
       </main>
     </div>
   );

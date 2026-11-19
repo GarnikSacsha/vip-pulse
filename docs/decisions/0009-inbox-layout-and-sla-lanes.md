@@ -37,3 +37,19 @@ and the team lead saw overdue work as one flat list.
   threshold change, an item can show `at_risk` with a wait above the new SLA until triage re-runs.
 - The dossier relies on optional `country` / `registered_at` profile columns; a real-data adapter
   maps its columns to these names or leaves them empty.
+
+## Independent review (2026-11-19)
+
+No critical or high findings. Fixed with tests:
+
+- Medium: between lg and xl the conversation pane scrolled the whole inbox; the right side now
+  scrolls on its own, each pane from xl.
+- Medium: the dossier showed stand-in tone without a label; rows carry «демо», the trend is hatched
+  and says it comes from the demo heuristic.
+- Low: counters and list refresh after a status change; `j`/`k` continue from the old position when
+  the selection leaves the list; dossier links keep the filters and the open tab; lane hint no
+  longer hard-codes 75 %; tab panels wired with arrow keys; a focused pill keeps its highlight.
+
+Accepted for the MVP (low): the queue's view tabs are filters styled as tabs; on a phone with a
+conversation open the page has no h1; a cited message lights its pills on hover only (keyboard
+users reach the same link from the pills).

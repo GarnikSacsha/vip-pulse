@@ -285,3 +285,43 @@ describe("conversation pane: stand-in output and dossier", () => {
     expect(links[0]).toHaveAttribute("aria-current", "page");
   });
 });
+
+describe("conversation pane: review fixes", () => {
+  it("labels stand-in tone in the dossier", async () => {
+    const user = userEvent.setup();
+    serve(detail());
+    renderPage();
+    await user.click(await screen.findByRole("tab", { name: "Игрок" }));
+    const history = await screen.findByRole("list", { name: "Переписки игрока" });
+    expect(within(history).getAllByText("демо")).toHaveLength(2);
+    expect(screen.getByText(/Оценки тона — демо-эвристика, не модель/)).toBeInTheDocument();
+  });
+
+  it("wires both tabs to existing panels and switches them with arrow keys", async () => {
+    const user = userEvent.setup();
+    serve(detail());
+    renderPage();
+    const analysisTab = await screen.findByRole("tab", { name: "Разбор" });
+    for (const tab of screen.getAllByRole("tab", { name: /Разбор|Игрок/ })) {
+      const panel = document.getElementById(tab.getAttribute("aria-controls") ?? "");
+      expect(panel).not.toBeNull();
+    }
+    act(() => analysisTab.focus());
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: "Игрок" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Игрок" })).toHaveFocus();
+  });
+
+  it("keeps a focused pill's highlight when the mouse leaves it", async () => {
+    const user = userEvent.setup();
+    serve(detail());
+    renderPage();
+    const pill = await screen.findByRole("button", { name: /^Сообщение 1:/ });
+    const [first] = within(screen.getByRole("list", { name: "Переписка" })).getAllByRole("listitem");
+    act(() => pill.focus());
+    await user.hover(pill);
+    await user.unhover(pill);
+    expect(first).toHaveAttribute("data-highlighted", "true");
+  });
+});
+

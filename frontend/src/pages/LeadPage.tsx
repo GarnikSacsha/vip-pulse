@@ -185,7 +185,7 @@ function ExceptionGroup({ group, items }: { group: Group; items: QueueItem[] }) 
 
 const LANES: { lane: SlaLane; hint: string; tone: string }[] = [
   { lane: "breached", hint: "Ждут дольше SLA канала", tone: "text-danger" },
-  { lane: "at_risk", hint: "Прошло больше 75 % SLA", tone: "text-p1" },
+  { lane: "at_risk", hint: "Близко к порогу SLA", tone: "text-p1" },
   { lane: "waiting", hint: "Ждут, время ещё есть", tone: "text-ink" },
   { lane: "ok", hint: "Ход за игроком", tone: "text-muted" },
 ];
@@ -254,7 +254,7 @@ function LaneCard({ item }: { item: QueueItem }) {
   const share = item.wait_hours === null ? 0 : Math.min(1, item.wait_hours / item.sla_hours);
   return (
     <Link
-      to={`/queue/${item.conversation_id}`}
+      to={`/queue/${encodeURIComponent(item.conversation_id)}`}
       className="block rounded-md bg-surface p-3 ring-1 ring-line transition-shadow hover:shadow-sm"
     >
       <div className="flex items-start gap-2">

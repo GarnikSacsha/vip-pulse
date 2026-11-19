@@ -4,7 +4,7 @@ import type { Player, QueueItem, Sentiment } from "../api/types";
 import { formatDay, formatShort } from "../lib/format";
 import { CATEGORY_LABEL, SENTIMENT_LABEL, STATUS_LABEL } from "../lib/labels";
 import { useApi } from "../lib/useApi";
-import { PriorityBadge } from "./Badges";
+import { PriorityBadge, Tag } from "./Badges";
 
 // Sparkline rows, top to bottom. "mixed" sits with "neutral": both are neither better nor worse.
 const LEVEL: Record<Sentiment, number> = { positive: 0, neutral: 1, mixed: 1, negative: 2 };
@@ -13,7 +13,7 @@ const H = 40;
 const PAD = 6;
 
 /** Player context for the manager: profile, tone across conversations, every conversation. */
-export function Dossier({ player, currentId }: { player: Player; currentId: string }) {
+export function Dossier({ player, currentId, search = "" }: { player: Player; currentId: string; search?: string }) {
   const history = useApi(() => api.queue({ player: [player.player_id] }), `dossier:${player.player_id}`);
   const items = [...(history.data ?? [])].sort((a, b) => b.last_message_at.localeCompare(a.last_message_at));
 
@@ -51,7 +51,7 @@ export function Dossier({ player, currentId }: { player: Player; currentId: stri
               {items.map((item) => (
                 <li key={item.task_id}>
                   <NavLink
-                    to={`/queue/${item.conversation_id}`}
+                    to={{ pathname: `/queue/${encodeURIComponent(item.conversation_id)}`, search }}
                     className={({ isActive }) =>
                       `flex items-start gap-3 px-4 py-2.5 text-sm transition-colors ${
                         isActive ? "bg-evidence-soft/60" : "hover:bg-canvas"
@@ -64,6 +64,11 @@ export function Dossier({ player, currentId }: { player: Player; currentId: stri
                         {item.category ? CATEGORY_LABEL[item.category] : "Разбор не выполнен"}
                         {item.conversation_id === currentId && <span className="text-muted"> · открыта</span>}
                       </span>
+                      {item.simulated && (
+                        <span className="mt-0.5 block">
+                          <Tag>демо</Tag>
+                        </span>
+                      )}
                       <span className="block text-xs text-muted">
                         {formatShort(item.last_message_at)} · {STATUS_LABEL[item.status]}
                         {item.sentiment && ` · ${SENTIMENT_LABEL[item.sentiment]}`}
@@ -99,9 +104,10 @@ function ToneTrend({ items }: { items: QueueItem[] }) {
   const latest = points[points.length - 1];
   const path = points.map((p, i) => `${i ? "L" : "M"}${x(i)},${y(p.sentiment)}`).join(" ");
   const label = `Тон игрока по перепискам: ${points.map((p) => SENTIMENT_LABEL[p.sentiment]).join(" → ")}`;
+  const simulated = points.some((p) => p.simulated);
 
   return (
-    <section className="rounded-lg bg-surface p-4 ring-1 ring-line">
+    <section className={`rounded-lg bg-surface p-4 ring-1 ring-line ${simulated ? "hatch" : ""}`}>
       <h3 className="text-sm font-medium text-muted">Тон по перепискам</h3>
       <div className="mt-2 flex items-center gap-3">
         <svg role="img" aria-label={label} viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="shrink-0 overflow-visible">
@@ -137,7 +143,8 @@ function ToneTrend({ items }: { items: QueueItem[] }) {
         </div>
       </div>
       <p className="mt-2 text-xs text-muted">
-        {latest && `Сейчас: ${SENTIMENT_LABEL[latest.sentiment]}. `}Определено разбором каждой переписки.
+        {latest && `Сейчас: ${SENTIMENT_LABEL[latest.sentiment]}. `}
+        {simulated ? "Оценки тона — демо-эвристика, не модель." : "Определено разбором каждой переписки."}
       </p>
     </section>
   );

@@ -230,3 +230,70 @@ describe("inbox: three panes and keyboard", () => {
     expect(row).toHaveAttribute("aria-current", "page");
   });
 });
+
+describe("inbox: review fixes", () => {
+  const a = queueItem({ task_id: 1, conversation_id: "d-001" });
+  const b = queueItem({
+    task_id: 2,
+    conversation_id: "d-002",
+    player: { player_id: "p-002", display_name: "Demo Player 002", manager_id: "mgr-01", segment: "gold" },
+    priority: "P1",
+  });
+  const c = queueItem({
+    task_id: 3,
+    conversation_id: "d-003",
+    player: { player_id: "p-003", display_name: "Demo Player 003", manager_id: "mgr-02", segment: "gold" },
+    priority: "P2",
+  });
+
+  it("refreshes the list and the counters after a status change, and j continues from there", async () => {
+    const user = userEvent.setup();
+    let resolved = false;
+    const base = conversation();
+    if (!base.task) throw new Error("fixture");
+    const calls = serveApi(vi, {
+      "/api/meta": meta,
+      "/api/queue": () => (resolved ? [a, c] : [a, b, c]),
+      "/api/conversations/d-002": conversation({
+        conversation_id: "d-002",
+        player: b.player,
+        task: { ...base.task, task_id: 2 },
+      }),
+      "/api/conversations/d-003": conversation({ conversation_id: "d-003", player: c.player }),
+      "/api/tasks/2": () => {
+        resolved = true;
+        return { ...base.task, task_id: 2, status: "resolved" };
+      },
+      "/api/tasks/2/audit": [],
+    });
+    renderQueue("/queue/d-002");
+    await screen.findByRole("heading", { name: "Demo Player 002" });
+    const metaBefore = calls.filter((u) => u === "/api/meta").length;
+
+    await user.click(screen.getByRole("button", { name: "Отметить решённой" }));
+    await vi.waitFor(() => expect(screen.queryByRole("link", { name: /Demo Player 002/ })).not.toBeInTheDocument());
+    expect(calls.filter((u) => u === "/api/meta").length).toBeGreaterThan(metaBefore);
+
+    await user.keyboard("j");
+    expect(await screen.findByRole("heading", { name: "Demo Player 003" })).toBeInTheDocument();
+  });
+
+  it("keeps the filters and the open tab when the dossier opens another conversation", async () => {
+    const user = userEvent.setup();
+    serveApi(vi, {
+      "/api/meta": meta,
+      "/api/queue": (url: string) =>
+        url.includes("player=") ? [a, queueItem({ task_id: 10, conversation_id: "d-010", last_message_at: "2026-10-02T12:00:00Z" })] : [a],
+      "/api/conversations/d-001": conversation(),
+      "/api/conversations/d-010": conversation({ conversation_id: "d-010" }),
+    });
+    renderQueue("/queue/d-001?priority=P0");
+    await user.click(await screen.findByRole("tab", { name: "Игрок" }));
+    const history = await screen.findByRole("list", { name: "Переписки игрока" });
+    const older = within(history).getAllByRole("link")[1];
+    expect(older).toHaveAttribute("href", "/queue/d-010?priority=P0");
+    await user.click(older as HTMLElement);
+    expect(await screen.findByRole("tabpanel", { name: "Игрок" })).toBeInTheDocument();
+  });
+});
+

@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useRef } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router";
 import { api } from "../api/client";
 import type { Meta, Priority, QueueFilters, QueueItem, TaskStatus } from "../api/types";
@@ -34,12 +34,19 @@ function viewCount(view: ViewDef, meta: Meta | null): number | null {
 
 export interface ShellContext {
   meta: Meta | null;
+  /** Refresh the department counters (tab counts) after a change. */
+  reloadMeta?: () => void;
 }
+
+export type PaneTab = "analysis" | "player";
 
 /** What the conversation pane gets from the inbox. */
 export interface InboxContext {
-  /** Refresh the list after a status change in the pane. */
+  /** Refresh the list and the counters after a status change in the pane. */
   reloadQueue: () => void;
+  /** The open tab of the right pane; kept while moving between conversations. */
+  pane: PaneTab;
+  setPane: (tab: PaneTab) => void;
 }
 
 /** True when a key press belongs to a text field, not to the inbox shortcuts. */
@@ -53,7 +60,8 @@ function typing(target: EventTarget | null): boolean {
  * On narrow screens the list and the conversation take turns, as list → detail navigation.
  */
 export function QueuePage() {
-  const { meta } = useOutletContext<ShellContext>();
+  const { meta, reloadMeta } = useOutletContext<ShellContext>();
+  const [pane, setPane] = useState<PaneTab>("analysis");
   const { id: selected } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -72,16 +80,28 @@ export function QueuePage() {
   // j / k: next and previous conversation, wherever the focus is, except inside text fields.
   const items = queue.data;
   const listRef = useRef<HTMLUListElement>(null);
+  // Where the selection was: when it leaves the list (e.g. resolved), j/k continue from that spot.
+  const lastIndex = useRef<number | null>(null);
+  useEffect(() => {
+    const at = items?.findIndex((i) => i.conversation_id === selected) ?? -1;
+    if (at !== -1) lastIndex.current = at;
+  }, [items, selected]);
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.altKey || e.ctrlKey || e.metaKey || typing(e.target) || !items?.length) return;
       if (e.key !== "j" && e.key !== "k") return;
+      const last = items.length - 1;
       const at = items.findIndex((i) => i.conversation_id === selected);
-      const next = e.key === "j" ? Math.min(at + 1, items.length - 1) : Math.max(at - 1, 0);
-      const target = items[at === -1 ? 0 : next];
+      let index: number;
+      if (at !== -1) index = e.key === "j" ? Math.min(at + 1, last) : Math.max(at - 1, 0);
+      else if (selected && lastIndex.current !== null)
+        // The old position now holds the item that came after the one that left.
+        index = e.key === "j" ? Math.min(lastIndex.current, last) : Math.max(lastIndex.current - 1, 0);
+      else index = 0;
+      const target = items[index];
       if (!target || target.conversation_id === selected) return;
       e.preventDefault();
-      navigate({ pathname: `/queue/${target.conversation_id}`, search: location.search });
+      navigate({ pathname: `/queue/${encodeURIComponent(target.conversation_id)}`, search: location.search });
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -118,7 +138,7 @@ export function QueuePage() {
         <div className="shrink-0 px-4 pt-5 sm:px-5">
           <div className="flex items-end justify-between gap-3">
             <h1 className="text-xl font-semibold tracking-tight">Очередь</h1>
-            <div className="flex items-center gap-1" aria-label="Фильтр по приоритету">
+            <div role="group" className="flex items-center gap-1" aria-label="Фильтр по приоритету">
               {PRIORITIES.map((p) => (
                 <button
                   key={p}
@@ -186,8 +206,20 @@ export function QueuePage() {
         </div>
       </section>
 
-      <div className={`${selected ? "block" : "hidden lg:block"} min-h-0 lg:h-full`}>
-        <Outlet context={{ reloadQueue: queue.reload } satisfies InboxContext} />
+      {/* lg..xl: the conversation and its analysis stack and scroll together; from xl each pane scrolls. */}
+      <div className={`${selected ? "block" : "hidden lg:block"} min-h-0 lg:h-full lg:overflow-y-auto`}>
+        <Outlet
+          context={
+            {
+              reloadQueue: () => {
+                queue.reload();
+                reloadMeta?.();
+              },
+              pane,
+              setPane,
+            } satisfies InboxContext
+          }
+        />
       </div>
     </div>
   );
@@ -261,7 +293,7 @@ function QueueRow({ item, search }: { item: QueueItem; search: string }) {
   const name = item.player.display_name ?? item.player.player_id;
   return (
     <NavLink
-      to={{ pathname: `/queue/${item.conversation_id}`, search }}
+      to={{ pathname: `/queue/${encodeURIComponent(item.conversation_id)}`, search }}
       className={({ isActive }) =>
         `relative grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-3 px-4 py-3 transition-colors before:absolute before:inset-y-0 before:left-0 before:w-[3px] sm:px-5 ${
           ROW_ACCENT[item.priority]

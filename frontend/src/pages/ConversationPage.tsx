@@ -1,4 +1,4 @@
-import { type ReactNode, useId, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useId, useState } from "react";
 import { Link, useLocation, useOutletContext, useParams } from "react-router";
 import { ApiError, api } from "../api/client";
 import type { AnalysisOut, AuditEvent, ConversationDetail, MessageOut, TaskOut, TaskStatus } from "../api/types";
@@ -16,7 +16,7 @@ import {
   qualityFlagLabel,
 } from "../lib/labels";
 import { useApi } from "../lib/useApi";
-import type { InboxContext } from "./QueuePage";
+import type { InboxContext, PaneTab } from "./QueuePage";
 
 // Mirrors TRANSITIONS in backend/app/tasks/service.py; the server re-checks every change.
 const ACTIONS: Record<TaskStatus, { to: TaskStatus; label: string; primary?: boolean }[]> = {
@@ -86,6 +86,9 @@ export function ConversationPane() {
       key={detail.data.conversation_id}
       data={detail.data}
       backTo={`/queue${search}`}
+      search={search}
+      pane={inbox?.pane}
+      setPane={inbox?.setPane}
       onChanged={() => {
         detail.reload();
         inbox?.reloadQueue();
@@ -115,20 +118,44 @@ interface Highlight {
   hover: (id: string | null) => void;
 }
 
+const TABS: [PaneTab, string][] = [
+  ["analysis", "Разбор"],
+  ["player", "Игрок"],
+];
+
 function Conversation({
   data,
   backTo,
+  search,
+  pane,
+  setPane,
   onChanged,
 }: {
   data: ConversationDetail;
   backTo: string;
+  search: string;
+  pane?: PaneTab;
+  setPane?: (tab: PaneTab) => void;
   onChanged: () => void;
 }) {
   const { task, analysis, player } = data;
   const name = player.display_name ?? player.player_id;
   const [hot, setHot] = useState<string | null>(null);
-  const [tab, setTab] = useState<"analysis" | "player">("analysis");
+  // The inbox keeps the tab across conversations; standalone, the pane keeps its own.
+  const [localTab, setLocalTab] = useState<PaneTab>("analysis");
+  const tab = pane ?? localTab;
+  const setTab = setPane ?? setLocalTab;
   const tabsId = useId();
+
+  function onTabKey(e: KeyboardEvent<HTMLButtonElement>) {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    const at = TABS.findIndex(([value]) => value === tab);
+    const next = TABS[(at + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length];
+    if (!next) return;
+    setTab(next[0]);
+    document.getElementById(`${tabsId}-${next[0]}`)?.focus();
+  }
 
   const highlight: Highlight = {
     hot,
@@ -173,7 +200,7 @@ function Conversation({
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 px-4 py-5 sm:px-6 lg:overflow-y-auto">
+        <div className="min-h-0 flex-1 px-4 py-5 sm:px-6 xl:overflow-y-auto">
           <ul aria-label="Переписка" className="mx-auto max-w-2xl space-y-3">
             {data.messages.map((m) => (
               <MessageBubble key={m.message_id} message={m} highlight={highlight} />
@@ -188,12 +215,7 @@ function Conversation({
 
       <aside className="min-h-0 border-t border-line bg-canvas xl:overflow-y-auto xl:border-t-0">
         <div role="tablist" aria-label="Панель диалога" className="flex gap-4 border-b border-line px-4 pt-3 text-sm sm:px-5">
-          {(
-            [
-              ["analysis", "Разбор"],
-              ["player", "Игрок"],
-            ] as const
-          ).map(([value, label]) => (
+          {TABS.map(([value, label]) => (
             <button
               key={value}
               id={`${tabsId}-${value}`}
@@ -201,6 +223,8 @@ function Conversation({
               type="button"
               aria-selected={tab === value}
               aria-controls={`${tabsId}-${value}-panel`}
+              tabIndex={tab === value ? 0 : -1}
+              onKeyDown={onTabKey}
               onClick={() => setTab(value)}
               className={`-mb-px border-b-2 pb-2 ${
                 tab === value ? "border-ink font-medium text-ink" : "border-transparent text-muted hover:text-ink"
@@ -211,6 +235,10 @@ function Conversation({
           ))}
         </div>
 
+        {/* Both panels exist for aria-controls; only the open one renders (the dossier loads lazily). */}
+        {TABS.filter(([value]) => value !== tab).map(([value]) => (
+          <div key={value} role="tabpanel" hidden id={`${tabsId}-${value}-panel`} aria-labelledby={`${tabsId}-${value}`} />
+        ))}
         <div
           role="tabpanel"
           id={`${tabsId}-${tab}-panel`}
@@ -232,7 +260,7 @@ function Conversation({
               {task && <History taskId={task.task_id} version={`${task.status}:${task.updated_at}`} />}
             </>
           ) : (
-            <Dossier player={player} currentId={data.conversation_id} />
+            <Dossier player={player} currentId={data.conversation_id} search={search} />
           )}
         </div>
       </aside>
@@ -309,7 +337,10 @@ function EvidencePill({ id, highlight }: { id: string; highlight: Highlight }) {
       title={message.text}
       data-active={String(active)}
       onMouseEnter={() => highlight.point(id)}
-      onMouseLeave={() => highlight.point(null)}
+      // A pill that keeps the keyboard focus keeps its message lit.
+      onMouseLeave={(e) => {
+        if (document.activeElement !== e.currentTarget) highlight.point(null);
+      }}
       onFocus={() => highlight.point(id)}
       onBlur={() => highlight.point(null)}
       onClick={() => highlight.point(id)}
