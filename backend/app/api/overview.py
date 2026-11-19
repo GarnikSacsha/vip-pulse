@@ -5,12 +5,10 @@ screen always matches the list behind it. Nothing is estimated or hard-coded.
 """
 
 from collections import Counter, defaultdict
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from sqlalchemy import func, select
 
-from app.api.deps import get_policy
 from app.api.queue import ACTIVE, SessionDep, _as_of, list_queue
 from app.api.schemas import (
     CategoryCount,
@@ -21,8 +19,7 @@ from app.api.schemas import (
     OverviewTotals,
     QueueItem,
 )
-from app.models import AnalysisRow, TaskRow
-from app.policy.config import PolicyConfig
+from app.models import AnalysisRow, ConversationRow, TaskRow
 from app.policy.priority import Route
 from app.schemas.analysis import Priority, ProcessingStatus
 from app.tasks.service import TaskStatus
@@ -98,8 +95,8 @@ def _channels(items: list[QueueItem]) -> list[ChannelCount]:
 
 
 @router.get("/overview", response_model=Overview)
-def overview(session: SessionDep, policy: Annotated[PolicyConfig, Depends(get_policy)]) -> Overview:
-    items = list_queue(session, policy.sla)
+def overview(session: SessionDep) -> Overview:
+    items = list_queue(session)
     statuses = dict(
         session.execute(
             select(AnalysisRow.status, func.count())
@@ -111,7 +108,7 @@ def overview(session: SessionDep, policy: Annotated[PolicyConfig, Depends(get_po
         select(func.count())
         .select_from(TaskRow)
         .join(AnalysisRow, TaskRow.analysis_id == AnalysisRow.id)
-        .where(AnalysisRow.simulated.is_(True))
+        .where(AnalysisRow.simulated.is_(True), AnalysisRow.status == ProcessingStatus.OK.value)
     )
     routes = dict.fromkeys(Route, 0)
     for item in items:
@@ -125,9 +122,10 @@ def overview(session: SessionDep, policy: Annotated[PolicyConfig, Depends(get_po
         channels=_channels(items),
         routes=routes,
         coverage=Coverage(
-            conversations=len(items),
+            conversations=session.scalar(select(func.count()).select_from(ConversationRow)) or 0,
+            in_queue=len(items),
             analysed=statuses.get(ProcessingStatus.OK.value, 0),
             failed=statuses.get(ProcessingStatus.FAILED.value, 0),
-            simulated=bool(simulated),
+            simulated=simulated or 0,
         ),
     )

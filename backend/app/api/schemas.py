@@ -169,10 +169,11 @@ class ChannelCount(BaseModel):
 
 
 class Coverage(BaseModel):
-    conversations: int
+    conversations: int  # imported, whether triaged or not
+    in_queue: int  # conversations with a work item (the rest wait for a triage run)
     analysed: int  # successful analyses behind the work items
     failed: int
-    simulated: bool  # at least one analysis came from the offline stand-in, not a model
+    simulated: int  # of `analysed`: produced by the offline stand-in, not a model
 
 
 class Overview(BaseModel):

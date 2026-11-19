@@ -24,11 +24,10 @@ from app.api.schemas import (
 from app.api.tasks import task_out as to_task_out
 from app.ingestion.store import load_conversation
 from app.models import AnalysisRow, ConversationRow, PlayerRow, TaskRow
-from app.policy.config import PolicyConfig, SlaConfig
+from app.policy.config import PolicyConfig
 from app.policy.facts import compute_facts
 from app.policy.priority import LABEL_MODEL, LABEL_SIMULATED, Route
 from app.schemas.analysis import Priority, ProcessingStatus
-from app.schemas.domain import Channel
 from app.tasks.service import TaskStatus
 
 router = APIRouter(prefix="/api", tags=["queue"])
@@ -87,7 +86,6 @@ def meta(session: SessionDep, provider: Annotated[LLMProvider, Depends(get_provi
 @router.get("/queue", response_model=list[QueueItem])
 def queue(
     session: SessionDep,
-    policy: Annotated[PolicyConfig, Depends(get_policy)],
     status: Annotated[list[TaskStatus] | None, Query()] = None,
     priority: Annotated[list[Priority] | None, Query()] = None,
     route: Annotated[list[Route] | None, Query()] = None,
@@ -96,7 +94,6 @@ def queue(
 ) -> list[QueueItem]:
     return list_queue(
         session,
-        policy.sla,
         status=status,
         priority=priority,
         route=route,
@@ -108,19 +105,20 @@ def queue(
 ACTIVE = frozenset({TaskStatus.OPEN, TaskStatus.IN_PROGRESS})
 
 
-def is_overdue(task: TaskRow, channel: str, sla: SlaConfig) -> bool:
-    """Active work whose player has waited longer than the channel's response SLA."""
-    return (
-        TaskStatus(task.status) in ACTIVE
-        and task.awaiting_reply
-        and task.wait_hours is not None
-        and task.wait_hours > sla.response_hours_for(Channel(channel))
+# Reasons the policy gives when the player waits past the SLA. Reading them, instead of comparing
+# the stored wait with today's thresholds, keeps "overdue" in step with the priority it explains.
+SLA_BREACH_REASONS = frozenset({"sla.breached", "sla.money_critical"})
+
+
+def is_overdue(task: TaskRow) -> bool:
+    """Active work that the last triage found waiting longer than the channel's SLA."""
+    return TaskStatus(task.status) in ACTIVE and any(
+        r.get("code") in SLA_BREACH_REASONS for r in task.reasons
     )
 
 
 def list_queue(
     session: Session,
-    sla: SlaConfig,
     *,
     status: list[TaskStatus] | None = None,
     priority: list[Priority] | None = None,
@@ -150,7 +148,7 @@ def list_queue(
 
     items = []
     for task, conv, player, analysis in session.execute(query):
-        late = is_overdue(task, conv.channel, sla)
+        late = is_overdue(task)
         if overdue is not None and late != overdue:
             continue
         result = _result(analysis)

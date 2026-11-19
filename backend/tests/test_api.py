@@ -282,7 +282,13 @@ def test_overview_breakdowns_and_coverage(client: TestClient) -> None:
     channels = {c["channel"]: (c["total"], c["active"], c["overdue"]) for c in body["channels"]}
     assert channels == {"telegram": (3, 3, 1), "email": (4, 1, 0), "whatsapp": (2, 1, 0)}
     assert body["routes"] == {"manager": 3, "rg_specialist": 1, "security": 1}
-    assert body["coverage"] == {"conversations": 9, "analysed": 9, "failed": 0, "simulated": True}
+    assert body["coverage"] == {
+        "conversations": 9,
+        "in_queue": 9,
+        "analysed": 9,
+        "failed": 0,
+        "simulated": 9,
+    }
 
 
 def test_overview_numbers_match_the_queue(client: TestClient) -> None:
@@ -297,7 +303,13 @@ def test_overview_numbers_match_the_queue(client: TestClient) -> None:
 def test_overview_counts_failed_analyses(sample_paths) -> None:
     with TestClient(create_app(engine=_engine(sample_paths, BrokenProvider()))) as c:
         body = c.get("/api/overview").json()
-    assert body["coverage"] == {"conversations": 9, "analysed": 0, "failed": 9, "simulated": False}
+    assert body["coverage"] == {
+        "conversations": 9,
+        "in_queue": 9,
+        "analysed": 0,
+        "failed": 9,
+        "simulated": 0,
+    }
     assert {cat["category"] for cat in body["categories"]} == {None}
 
 
@@ -309,3 +321,33 @@ def test_overview_of_an_empty_database() -> None:
     assert body["as_of"] is None
     assert body["totals"]["total"] == 0
     assert body["managers"] == [] and body["categories"] == [] and body["channels"] == []
+
+
+def _sla_reason(item: dict) -> bool:
+    return any(r["code"] in {"sla.breached", "sla.money_critical"} for r in item["reasons"])
+
+
+def test_overdue_follows_the_decision_that_set_the_priority(sample_paths) -> None:
+    # The API runs with a looser SLA than the triage that set the priorities (e.g. thresholds
+    # edited, CLI re-run, API not restarted). "Overdue" must agree with the priority reasons.
+    loose = CFG.model_copy(
+        update={
+            "sla": CFG.sla.model_copy(update={"response_hours": 48, "channel_response_hours": {}})
+        }
+    )
+    with TestClient(create_app(engine=_engine(sample_paths), policy=loose)) as c:
+        items = c.get("/api/queue").json()
+    assert {i["conversation_id"] for i in items if i["overdue"]} == {"d-001"}
+    for item in items:
+        active = item["status"] in {"open", "in_progress"}
+        assert item["overdue"] == (active and _sla_reason(item)), item["conversation_id"]
+
+
+def test_coverage_counts_imported_conversations_not_yet_triaged(sample_paths) -> None:
+    engine = make_engine("sqlite://")
+    init_db(engine)
+    for session in session_scope(engine):
+        save_bundle(session, ingest(get_adapter("sample_v1"), *sample_paths))
+    with TestClient(create_app(engine=engine)) as c:
+        coverage = c.get("/api/overview").json()["coverage"]
+    assert (coverage["conversations"], coverage["in_queue"]) == (9, 0)
