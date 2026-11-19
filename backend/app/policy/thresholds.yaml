@@ -50,6 +50,30 @@ safety:
     - unauthorized
     - stolen
 
+  # Another account or a shared payment card in a player's message. Not a block and not a
+  # mistake: an alert that the manager must contact the player personally and clarify.
+  multi_account:
+    - другой аккаунт
+    - другого аккаунта
+    - другом аккаунте
+    - второй аккаунт
+    - второго аккаунта
+    - втором аккаунте
+    - аккаунт жены
+    - аккаунт мужа
+    - аккаунт друга
+    - аккаунт брата
+    - аккаунт сестры
+    - той же карт
+    - та же карта
+    - одну карту
+    - одной карты
+    - another account
+    - second account
+    - other account
+    - same card
+    - one card
+
 # Signals from the player's profile (players.csv columns kept by the adapter). Missing columns
 # give no signal. All of this is decided in code; the LLM never sees it.
 player:

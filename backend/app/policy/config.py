@@ -33,8 +33,10 @@ class AnalysisConfig(_Cfg):
 class SafetyConfig(_Cfg):
     responsible_gaming: tuple[str, ...]
     fraud_security: tuple[str, ...]
+    # Another account or a shared card: the manager must contact the player personally.
+    multi_account: tuple[str, ...] = ()
 
-    @field_validator("responsible_gaming", "fraud_security")
+    @field_validator("responsible_gaming", "fraud_security", "multi_account")
     @classmethod
     def _lower(cls, words: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(w.lower() for w in words)

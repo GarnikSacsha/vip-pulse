@@ -418,3 +418,10 @@ def test_failed_analysis_has_no_sentiment(sample_paths) -> None:
     with TestClient(create_app(engine=_engine(sample_paths, BrokenProvider()))) as c:
         items = c.get("/api/queue").json()
     assert {i["sentiment"] for i in items} == {None}
+
+
+def test_queue_and_task_expose_alerts(client: TestClient) -> None:
+    items = client.get("/api/queue").json()
+    assert all(i["alerts"] == [] for i in items)  # the sample has no such case
+    detail = client.get("/api/conversations/d-001").json()
+    assert detail["task"]["alerts"] == []

@@ -72,6 +72,8 @@ class QueueItem(BaseModel):
     overdue: bool
     sla_hours: float  # the channel's response SLA under the current thresholds
     sla_lane: SlaLane  # computed by app.policy.sla; "breached" exactly when overdue
+    # Alerts for the manager to act personally, e.g. "multi_account" (from reasons "alert.*").
+    alerts: list[str]
     requires_review: bool
     quality_flags: list[str]
     reasons: list[ReasonOut]
@@ -112,6 +114,7 @@ class TaskOut(BaseModel):
     next_action: str | None
     reasons: list[ReasonOut]
     quality_flags: list[str]
+    alerts: list[str]
     requires_review: bool
     suppress_offers: bool
     updated_at: datetime

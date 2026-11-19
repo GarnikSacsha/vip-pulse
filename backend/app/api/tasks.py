@@ -58,6 +58,15 @@ class RunSummaryOut(BaseModel):
     budget_exhausted: bool  # some conversations were not analysed: spending limit reached
 
 
+def alerts_of(task: TaskRow) -> list[str]:
+    """Alert names from the stored reasons ("alert.multi_account" -> "multi_account")."""
+    return [
+        r["code"].removeprefix("alert.")
+        for r in task.reasons
+        if r.get("code", "").startswith("alert.")
+    ]
+
+
 def task_out(task: TaskRow) -> TaskOut:
     return TaskOut(
         task_id=task.id,
@@ -67,6 +76,7 @@ def task_out(task: TaskRow) -> TaskOut:
         next_action=task.next_action,
         reasons=[ReasonOut(**r) for r in task.reasons],
         quality_flags=task.quality_flags,
+        alerts=alerts_of(task),
         requires_review=task.requires_review,
         suppress_offers=task.suppress_offers,
         updated_at=task.updated_at,

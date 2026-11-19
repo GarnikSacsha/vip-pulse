@@ -18,6 +18,7 @@ def sla_lane(
     sla_hours: float,
     breached: bool,
     at_risk_share: float,
+    reply_needed: bool = True,
 ) -> SlaLane:
     """Lane for one item.
 
@@ -25,7 +26,8 @@ def sla_lane(
     agrees with the priority. Without it the item is at most "at risk", even if today's thresholds
     would call it late: the next triage run settles that.
     """
-    if not active or not awaiting_reply or wait_hours is None:
+    # "Спасибо, всё пришло": the player spoke last, but there is nothing to answer.
+    if not active or not awaiting_reply or not reply_needed or wait_hours is None:
         return SlaLane.OK
     if breached:
         return SlaLane.BREACHED
