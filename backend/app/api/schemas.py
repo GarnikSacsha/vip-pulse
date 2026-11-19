@@ -54,6 +54,21 @@ class ReasonOut(BaseModel):
     text: str
 
 
+class WinbackOut(BaseModel):
+    """A player to win back, decided in code (app.policy.winback), never by the model."""
+
+    player: PlayerOut
+    tier: str  # urgent | attention | introduce
+    reasons: list[ReasonOut]
+    next_action: str
+    last_login_days: int | None
+    last_contact_days: int | None  # None: the manager never wrote
+    deposits_30d_usd: float | None
+    deposits_prev_30d_usd: float | None
+    favorite_game: str | None
+    latest_conversation_id: str | None
+
+
 class QueueItem(BaseModel):
     task_id: int
     conversation_id: str

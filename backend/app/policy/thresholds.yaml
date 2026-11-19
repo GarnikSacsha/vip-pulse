@@ -83,6 +83,11 @@ player:
   deposit_drop_share: 0.5        # deposits fell below half of the previous 30 days = churn risk
   deposit_spike_ratio: 1.7       # deposits grew 1.7x or more = check for harm, human review
 
+# Who to win back (page «Кого вернуть»). Restricted accounts are never listed.
+winback:
+  silent_days: 14       # no login for this many days = went silent (urgent)
+  no_contact_days: 21   # mention when the last conversation is older than this
+
 # Words that make a message a promotional offer. Offers are never suggested to players with a
 # responsible-gaming signal, and a manager sending one is flagged as a quality issue.
 offers:

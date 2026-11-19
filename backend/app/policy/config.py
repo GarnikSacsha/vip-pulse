@@ -51,12 +51,18 @@ class PlayerConfig(_Cfg):
     deposit_spike_ratio: float = Field(default=1.7, gt=1)  # now > ratio × previous 30 days
 
 
+class WinbackConfig(_Cfg):
+    silent_days: int = Field(default=14, ge=1)  # no login this long = went silent
+    no_contact_days: int = Field(default=21, ge=1)  # last conversation this long ago
+
+
 class PolicyConfig(_Cfg):
     sla: SlaConfig
     analysis: AnalysisConfig
     safety: SafetyConfig
     offers: tuple[str, ...]
     player: PlayerConfig = PlayerConfig()
+    winback: WinbackConfig = WinbackConfig()
 
     @field_validator("offers")
     @classmethod
