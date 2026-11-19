@@ -22,21 +22,30 @@ Team lead and head of VIP get thin oversight views over the same data.
 ## Stack and runtime
 
 - Language/framework: Python 3.11+ (local: 3.14 via `py`), FastAPI, Pydantic v2, SQLAlchemy 2.
-  Frontend (stage 3): React + TypeScript + Vite + Tailwind.
+  Frontend: React 19 + TypeScript (strict) + Vite + Tailwind v4, Node 24.
 - Persistence: SQLite file (`DATABASE_URL`), local only.
 - External providers: Gemini (stage 2) behind `app/analysis/llm`; `fake` provider offline.
 - Approved dependencies: fastapi, uvicorn, pydantic, pydantic-settings, sqlalchemy, pyyaml;
-  dev: pytest, httpx2, ruff. Anything else needs approval.
+  dev: pytest, httpx2, ruff.
+  Frontend (approved 2026-11-19): react, react-dom, react-router; dev: vite,
+  @vitejs/plugin-react, typescript, @types/react(-dom), tailwindcss, @tailwindcss/vite, vitest,
+  jsdom, @testing-library/{react,user-event,jest-dom}, eslint, @eslint/js, typescript-eslint,
+  eslint-plugin-react-hooks, globals. Exact versions, each published at least 14 days before
+  install. Anything else needs approval.
 - Supported local environment: Windows + PowerShell. CI: Ubuntu, Python 3.12 and 3.14.
 
 ## Repository map
 
-- Entry points: `backend/app/main.py` (API), `backend/app/cli.py` (`import`, `triage`)
+- Entry points: `backend/app/main.py` (API factory), `backend/app/cli.py` (`import`, `triage`),
+  `frontend/src/main.tsx` (UI)
 - Domain contracts: `backend/app/schemas/`
 - Ingestion: `backend/app/ingestion/` (one adapter per source format in `adapters/`)
 - Policy (facts, safety, priority, `thresholds.yaml`): `backend/app/policy/`
 - LLM analysis (prompt, providers, validation): `backend/app/analysis/`
-- Tests: `backend/tests/`
+- HTTP API (FastAPI routers and response models): `backend/app/api/`
+- Work items, triage runs, audit: `backend/app/tasks/`
+- UI (React): `frontend/src/` (`api/` typed client mirroring `backend/app/api/schemas.py`)
+- Tests: `backend/tests/` (pytest), `frontend/src/**/*.test.ts(x)` (vitest)
 - Configuration: `.env.example` → `backend/.env` (git-ignored)
 - Data: `data/sample/` synthetic (committed), `data/input/` task files (git-ignored)
 - Documentation: `README.md`, `docs/architecture.md`, `docs/decisions/`
@@ -55,7 +64,18 @@ Lint:                .\.venv\Scripts\python.exe -m ruff check .
 Typecheck:           not configured (no type checker approved yet)
 Targeted test:       .\.venv\Scripts\python.exe -m pytest tests/test_policy.py -k <name>
 Full tests:          .\.venv\Scripts\python.exe -m pytest
-Build/package:       not applicable yet
+Build/package:       not applicable for the backend
+```
+
+Frontend, from `frontend/` (the API must run on :8000; Vite proxies `/api`):
+
+```text
+Install:             npm ci
+Develop:             npm run dev        (http://localhost:5173)
+Lint:                npm run lint
+Typecheck:           npm run typecheck
+Tests:               npm test
+Build:               npm run build
 ```
 
 `pytest` writes temp files to `backend/.pytest-tmp` (configured in `pyproject.toml`) because the
@@ -95,7 +115,8 @@ system temp directory on the dev machine cannot be cleaned by pytest.
 - Data class: task files are fictional but belong to the employer → treat as internal; do not
   publish them. Sending them to Gemini requires a recorded provider decision first.
 - Paid LLM calls: none without an explicit budget (attempts and spending cap) from Denys.
-- Production credentials: none. Network: GitHub, Linear and (stage 2, approved) Gemini API only.
+- Production credentials: none. Network: GitHub, Linear, npm registry (installs)
+  and (stage 2, approved) Gemini API only.
 - Linear: no new issues (workspace limit). Progress is tracked as ☐/☑ in the project description.
 
 ## Review gates
