@@ -24,10 +24,11 @@ from app.api.schemas import (
 from app.api.tasks import task_out as to_task_out
 from app.ingestion.store import load_conversation
 from app.models import AnalysisRow, ConversationRow, PlayerRow, TaskRow
-from app.policy.config import PolicyConfig
+from app.policy.config import PolicyConfig, SlaConfig
 from app.policy.facts import compute_facts
 from app.policy.priority import LABEL_MODEL, LABEL_SIMULATED, Route
 from app.schemas.analysis import Priority, ProcessingStatus
+from app.schemas.domain import Channel
 from app.tasks.service import TaskStatus
 
 router = APIRouter(prefix="/api", tags=["queue"])
@@ -86,21 +87,48 @@ def meta(session: SessionDep, provider: Annotated[LLMProvider, Depends(get_provi
 @router.get("/queue", response_model=list[QueueItem])
 def queue(
     session: SessionDep,
+    policy: Annotated[PolicyConfig, Depends(get_policy)],
     status: Annotated[list[TaskStatus] | None, Query()] = None,
     priority: Annotated[list[Priority] | None, Query()] = None,
     route: Annotated[list[Route] | None, Query()] = None,
+    manager: Annotated[list[str] | None, Query(max_length=64)] = None,
+    overdue: bool | None = None,
 ) -> list[QueueItem]:
-    return list_queue(session, status=status, priority=priority, route=route)
+    return list_queue(
+        session,
+        policy.sla,
+        status=status,
+        priority=priority,
+        route=route,
+        manager=manager,
+        overdue=overdue,
+    )
+
+
+ACTIVE = frozenset({TaskStatus.OPEN, TaskStatus.IN_PROGRESS})
+
+
+def is_overdue(task: TaskRow, channel: str, sla: SlaConfig) -> bool:
+    """Active work whose player has waited longer than the channel's response SLA."""
+    return (
+        TaskStatus(task.status) in ACTIVE
+        and task.awaiting_reply
+        and task.wait_hours is not None
+        and task.wait_hours > sla.response_hours_for(Channel(channel))
+    )
 
 
 def list_queue(
     session: Session,
+    sla: SlaConfig,
     *,
     status: list[TaskStatus] | None = None,
     priority: list[Priority] | None = None,
     route: list[Route] | None = None,
+    manager: list[str] | None = None,
+    overdue: bool | None = None,
 ) -> list[QueueItem]:
-    """The work queue, shared by the API and the CLI."""
+    """The work queue, shared by the API, the oversight views and the CLI."""
     query = (
         select(TaskRow, ConversationRow, PlayerRow, AnalysisRow)
         .join(ConversationRow, ConversationRow.conversation_id == TaskRow.conversation_id)
@@ -113,6 +141,8 @@ def list_queue(
         query = query.where(TaskRow.priority.in_([p.value for p in priority]))
     if route:
         query = query.where(TaskRow.route.in_([r.value for r in route]))
+    if manager:
+        query = query.where(PlayerRow.manager_id.in_(manager))
     # Most urgent first; within a priority, the longest wait first.
     query = query.order_by(
         TaskRow.priority, TaskRow.wait_hours.desc().nulls_last(), TaskRow.conversation_id
@@ -120,6 +150,9 @@ def list_queue(
 
     items = []
     for task, conv, player, analysis in session.execute(query):
+        late = is_overdue(task, conv.channel, sla)
+        if overdue is not None and late != overdue:
+            continue
         result = _result(analysis)
         items.append(
             QueueItem(
@@ -135,6 +168,7 @@ def list_queue(
                 next_action=task.next_action,
                 wait_hours=task.wait_hours if task.awaiting_reply else None,
                 awaiting_reply=task.awaiting_reply,
+                overdue=late,
                 requires_review=task.requires_review,
                 quality_flags=task.quality_flags,
                 reasons=[ReasonOut(**r) for r in task.reasons],

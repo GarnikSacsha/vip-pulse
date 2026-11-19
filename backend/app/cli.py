@@ -89,7 +89,7 @@ def cmd_triage(args: argparse.Namespace) -> int:
             print("no conversations in the database; run `import` first", file=sys.stderr)
             return 1
         summary = run_triage(session, provider, cfg)
-        items = list_queue(session)
+        items = list_queue(session, cfg.sla)
         as_of = dataset_as_of(load_conversations(session))
     print(f"as of {as_of:%Y-%m-%d %H:%M} UTC · provider {provider.name}:{provider.model}")
     print(
