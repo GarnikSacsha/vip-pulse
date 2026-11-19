@@ -150,6 +150,21 @@ npm run lint; npm run typecheck; npm test; npm run build
 
 CI runs all of them (Python 3.12 and 3.14, Node 24) and blocks commits that contain `.env` or task data.
 
+## Results on the task files
+
+40 conversations, 50 players (`data/input/`, not in Git), analysed by `gemini-3.8-flash` for
+$0.052, 40/40 valid answers.
+
+- **Queue:** 9 × P0, 10 × P1, 4 × P2, 17 × P3; 6 conversations routed to the responsible-gaming
+  specialist.
+- **Manager mistakes flagged:** a bonus "to win it back" for a player deep in losses, cashback
+  offered to a player asking to be blocked, a reload and a limit raise offered to a player who set
+  a limit. A manager who refused bonuses and set a limit is not flagged.
+- **Found by the model, not by keywords:** a VIP called by the wrong name twice, inaccurate bonus
+  terms, a player chasing losses with bonuses.
+- **Missed:** a request for a bonus on the wife's account with the same card (possible
+  multi-accounting) got a low priority. Bonus abuse is not a rule yet.
+
 ## Measuring analysis quality
 
 `data/sample/gold.yaml` holds hand labels for the 9 sample conversations (every acceptable answer
@@ -200,14 +215,16 @@ docs/
 
 | Done | Next |
 |---|---|
-| Import with validation report, dedupe, idempotent re-import | Adapter for the real `dialogs.json` / `players.csv` (awaiting files) |
-| Deterministic facts, SLA, safety net, priority with reasons | Harder gold cases and labelled task conversations |
+| Import with validation report, dedupe, idempotent re-import | Labelled task conversations to measure quality |
+| Deterministic facts, SLA, safety net, priority with reasons | Multi-account / bonus-abuse signal (missed by the model on the task files) |
 | Strict LLM contract, fail-closed evidence check, prompt-injection fencing | Screenshots, one-page brief and demo video |
 | Analysis cache, work items, status history | |
 | Three-pane inbox, evidence pills, player dossier, pulse indicator | |
 | Gold set and `eval` command (no LLM calls) | |
 | Gemini provider: retries, parallel calls, $1 spending cap with a ledger | |
 | Team lead SLA lanes and head-of-VIP view | |
+| Task files: `task_v1` adapter, analysed by Gemini | |
+| Player signals: account restrictions, payment problems, deposit trends | |
 
 ## Data and secrets
 
