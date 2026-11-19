@@ -13,6 +13,8 @@ human specialist.
 > switched on with an API key, under a hard spending cap.
 > See [what is done and what is next](#status).
 
+One-page brief (in Russian): [docs/brief.md](docs/brief.md).
+
 ## Who it is for
 
 | Role | What they get |
