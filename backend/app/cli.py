@@ -19,7 +19,7 @@ from app.ingestion.report import ImportReport
 from app.ingestion.store import load_conversations, save_bundle
 from app.policy.config import PolicyConfig
 from app.policy.facts import dataset_as_of
-from app.tasks.service import run_triage
+from app.tasks.service import RunInProgress, run_triage
 
 
 def _print_report(report: ImportReport) -> None:
@@ -88,14 +88,23 @@ def cmd_triage(args: argparse.Namespace) -> int:
         if not load_conversations(session):
             print("no conversations in the database; run `import` first", file=sys.stderr)
             return 1
-        summary = run_triage(session, provider, cfg)
+        try:
+            summary = run_triage(session, provider, cfg)
+        except RunInProgress:
+            print("a triage run is already in progress", file=sys.stderr)
+            return 1
         items = list_queue(session)
         as_of = dataset_as_of(load_conversations(session))
     print(f"as of {as_of:%Y-%m-%d %H:%M} UTC · provider {provider.name}:{provider.model}")
     print(
         f"analysed {summary.analysed}, reused {summary.reused}, failed {summary.failed} · "
-        f"tasks +{summary.created} ~{summary.updated}, reopened {summary.reopened}\n"
+        f"tasks +{summary.created} ~{summary.updated}, reopened {summary.reopened}"
     )
+    if summary.budget_left_usd is not None:
+        print(f"LLM spend this run ${summary.spent_usd:.4f}, left ${summary.budget_left_usd:.4f}")
+    if summary.budget_exhausted:
+        print("spending limit reached: some conversations were not analysed (LLM_BUDGET_USD)")
+    print()
     _print_queue(items[: args.limit] if args.limit else items)
     return 0
 

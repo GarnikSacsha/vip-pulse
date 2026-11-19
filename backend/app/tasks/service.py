@@ -6,17 +6,19 @@ updates the decision but never silently closes or reopens work, except when the 
 again after the work item was closed.
 """
 
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.analysis.llm.base import LLMProvider
+from app.analysis.llm.budget import BudgetExceeded, SpendingMeter, meter_of
 from app.analysis.service import analysis_key, analyze_conversation
 from app.ingestion.store import load_conversations, load_players
-from app.models import AnalysisRow, AuditRow, TaskRow
+from app.models import AnalysisRow, AuditRow, LLMCallRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.policy.facts import ConversationFacts
 from app.schemas.analysis import AnalysisOutcome, LLMAnalysis, Priority, ProcessingStatus
@@ -24,6 +26,12 @@ from app.schemas.domain import Conversation, Player, SenderRole
 from app.triage import TriageItem, triage
 
 SYSTEM_ACTOR = "system"
+# One triage run at a time per process: two parallel runs would double-spend the LLM budget.
+RUN_LOCK = threading.Lock()
+
+
+class RunInProgress(RuntimeError):
+    pass
 
 
 class TaskStatus(StrEnum):
@@ -55,6 +63,15 @@ class RunSummary:
     created: int = 0
     updated: int = 0
     reopened: int = 0
+    spent_usd: float = 0.0  # paid LLM spend of this run
+    budget_left_usd: float | None = None  # None: the provider is not metered (fake)
+    budget_exhausted: bool = False
+
+
+def ledger_spent(session: Session) -> float:
+    """Total paid LLM spend recorded in this database, across all runs."""
+    total = session.scalar(select(func.coalesce(func.sum(LLMCallRow.cost_usd), 0.0)))
+    return float(total or 0.0)
 
 
 def _now(now: datetime | None) -> datetime:
@@ -89,7 +106,26 @@ class _CachingAnalyzer:
 
     def __init__(self, session: Session, provider: LLMProvider, summary: RunSummary, at: datetime):
         self.session, self.provider, self.summary, self.at = session, provider, summary, at
+        self.meter: SpendingMeter | None = meter_of(provider)
         self.analysis_ids: dict[str, int] = {}
+
+    def _book_usage(self) -> None:
+        """Persist billed calls right away, so a crash mid-run cannot hide spend."""
+        if self.meter is None:
+            return
+        for record in self.meter.drain():
+            self.session.add(
+                LLMCallRow(
+                    at=record.at,
+                    model=record.model,
+                    input_tokens=record.input_tokens,
+                    output_tokens=record.output_tokens,
+                    cost_usd=record.cost_usd,
+                    estimated=record.estimated,
+                    outcome=record.outcome,
+                )
+            )
+            self.summary.spent_usd += record.cost_usd
 
     def __call__(
         self, conv: Conversation, player: Player | None, facts: ConversationFacts
@@ -114,6 +150,9 @@ class _CachingAnalyzer:
             )
 
         outcome = analyze_conversation(self.provider, conv, player, facts)
+        self._book_usage()
+        if (outcome.error or "").startswith(BudgetExceeded.__name__):
+            self.summary.budget_exhausted = True
         row = AnalysisRow(
             conversation_id=conv.conversation_id,
             input_hash=outcome.input_hash or key,
@@ -202,17 +241,30 @@ def run_triage(
     *,
     now: datetime | None = None,
 ) -> RunSummary:
-    at = _now(now)
+    if not RUN_LOCK.acquire(blocking=False):
+        raise RunInProgress("a triage run is already in progress")
+    try:
+        return _run(session, provider, cfg, _now(now))
+    finally:
+        RUN_LOCK.release()
+
+
+def _run(session: Session, provider: LLMProvider, cfg: PolicyConfig, at: datetime) -> RunSummary:
     summary = RunSummary()
+    meter = meter_of(provider)
+    if meter is not None:
+        # The cap covers every run recorded in the database, not just this process.
+        meter.reset_spent(ledger_spent(session))
     conversations = load_conversations(session)
-    if not conversations:
-        return summary
-    analyzer = _CachingAnalyzer(session, provider, summary, at)
-    items = triage(conversations, load_players(session), provider, cfg, analyzer=analyzer)
-    for item in items:
-        conversation_id = item.conversation.conversation_id
-        _apply(session, item, analyzer.analysis_ids.get(conversation_id), summary, at)
-    session.commit()
+    if conversations:
+        analyzer = _CachingAnalyzer(session, provider, summary, at)
+        items = triage(conversations, load_players(session), provider, cfg, analyzer=analyzer)
+        for item in items:
+            conversation_id = item.conversation.conversation_id
+            _apply(session, item, analyzer.analysis_ids.get(conversation_id), summary, at)
+        session.commit()
+    if meter is not None:
+        summary.budget_left_usd = meter.remaining_usd
     return summary
 
 

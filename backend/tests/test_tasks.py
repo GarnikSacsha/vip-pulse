@@ -9,10 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.analysis.llm import FakeProvider, LLMError
+from app.analysis.llm.budget import SpendingMeter
 from app.ingestion.adapters import get_adapter
 from app.ingestion.pipeline import IngestBundle, ingest
 from app.ingestion.store import save_bundle
-from app.models import AnalysisRow, AuditRow, TaskRow
+from app.models import AnalysisRow, AuditRow, LLMCallRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.schemas.domain import Message, SenderRole
 from app.tasks.service import InvalidTransition, TaskStatus, change_status, run_triage
@@ -174,3 +175,61 @@ def test_new_player_message_reopens_resolved_task(loaded: Session, bundle: Inges
         "resolved",
         "open",
     )
+
+
+# --- paid providers: spend ledger and budget ----------------------------------------------
+
+
+class MeteredProvider(FakeProvider):
+    """Bills a flat $0.10 per call against its meter, like a paid model would."""
+
+    simulated: ClassVar[bool] = False
+
+    def __init__(self, limit_usd: float) -> None:
+        self.meter = SpendingMeter(limit_usd=limit_usd)
+        self.calls = 0
+
+    def complete_json(self, system: str, user: str, schema: dict[str, Any]) -> str:
+        self.meter.reserve(0.10)
+        self.calls += 1
+        self.meter.settle(0.10, model="metered:test", input_tokens=100, cost_usd=0.10)
+        return super().complete_json(system, user, schema)
+
+
+def test_paid_calls_are_written_to_the_ledger(loaded: Session) -> None:
+    summary = run_triage(loaded, MeteredProvider(limit_usd=5.0), CFG, now=NOW)
+    calls = loaded.scalars(select(LLMCallRow)).all()
+    assert len(calls) == 9
+    assert all(c.model == "metered:test" and c.cost_usd == pytest.approx(0.10) for c in calls)
+    assert summary.spent_usd == pytest.approx(0.90)
+    assert summary.budget_left_usd == pytest.approx(4.10)
+    assert summary.budget_exhausted is False
+
+
+def test_exhausted_budget_fails_the_rest_without_calls(loaded: Session) -> None:
+    provider = MeteredProvider(limit_usd=0.45)
+    summary = run_triage(loaded, provider, CFG, now=NOW)
+    assert provider.calls == 4
+    assert (summary.analysed, summary.failed) == (4, 5)
+    assert summary.budget_exhausted is True
+    failed = loaded.scalars(select(AnalysisRow).where(AnalysisRow.status == "failed")).all()
+    assert all("BudgetExceeded" in (a.error or "") for a in failed)
+    assert len(_tasks(loaded)) == 9  # the queue is still complete, failed items go to review
+
+
+def test_budget_counts_spend_of_earlier_runs_and_processes(loaded: Session) -> None:
+    run_triage(loaded, MeteredProvider(limit_usd=0.45), CFG, now=NOW)
+    fresh = MeteredProvider(limit_usd=0.45)  # e.g. after an API restart
+    summary = run_triage(loaded, fresh, CFG, now=NOW)
+    assert fresh.calls == 0
+    assert summary.budget_left_usd == pytest.approx(0.05)
+
+
+def test_unmetered_provider_reports_no_budget(loaded: Session) -> None:
+    summary = run_triage(loaded, FakeProvider(), CFG, now=NOW)
+    assert (summary.spent_usd, summary.budget_left_usd, summary.budget_exhausted) == (
+        0.0,
+        None,
+        False,
+    )
+    assert loaded.scalars(select(LLMCallRow)).all() == []

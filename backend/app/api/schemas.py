@@ -22,6 +22,8 @@ class ProviderInfo(BaseModel):
     model: str
     simulated: bool
     label: str  # shown next to every AI-derived value in the UI
+    budget_usd: float | None  # spending limit of a paid provider; None for the fake
+    spent_usd: float | None  # recorded spend across all runs; None for the fake
 
 
 class Counts(BaseModel):

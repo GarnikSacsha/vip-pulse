@@ -9,13 +9,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
 from app.analysis.llm import FakeProvider, LLMError
+from app.analysis.llm.budget import SpendingMeter
 from app.db import init_db, make_engine, session_scope
 from app.ingestion.adapters import get_adapter
 from app.ingestion.pipeline import ingest
 from app.ingestion.store import save_bundle
 from app.main import create_app
 from app.policy.config import PolicyConfig
-from app.tasks.service import run_triage
+from app.tasks.service import RUN_LOCK, run_triage
 
 CFG = PolicyConfig.load()
 NOW = datetime(2026, 11, 19, 9, 0, tzinfo=UTC)
@@ -53,6 +54,8 @@ def test_meta_reports_provider_and_counts(client: TestClient) -> None:
         "model": "heuristic-v1",
         "simulated": True,
         "label": "эвристика fake, без модели",
+        "budget_usd": None,
+        "spent_usd": None,
     }
     assert body["counts"]["total"] == 9
     assert body["counts"]["by_status"] == {
@@ -199,4 +202,35 @@ def test_triage_can_be_rerun_from_the_api(client: TestClient) -> None:
         "created": 0,
         "updated": 9,
         "reopened": 0,
+        "spent_usd": 0.0,
+        "budget_left_usd": None,
+        "budget_exhausted": False,
     }
+
+
+def test_concurrent_triage_run_is_rejected(client: TestClient) -> None:
+    with RUN_LOCK:
+        response = client.post("/api/triage/run")
+    assert response.status_code == 409
+    assert client.post("/api/triage/run").status_code == 200
+
+
+class MeteredProvider(FakeProvider):
+    simulated: ClassVar[bool] = False
+
+    def __init__(self) -> None:
+        self.meter = SpendingMeter(limit_usd=1.0)
+
+    def complete_json(self, system: str, user: str, schema: dict[str, Any]) -> str:
+        self.meter.reserve(0.01)
+        self.meter.settle(0.01, model="metered:test", cost_usd=0.01)
+        return super().complete_json(system, user, schema)
+
+
+def test_meta_reports_budget_of_a_paid_provider(sample_paths) -> None:
+    provider = MeteredProvider()
+    app = create_app(engine=_engine(sample_paths, provider), provider=provider)
+    with TestClient(app) as c:
+        info = c.get("/api/meta").json()["provider"]
+    assert info["budget_usd"] == 1.0
+    assert info["spent_usd"] == pytest.approx(0.09)

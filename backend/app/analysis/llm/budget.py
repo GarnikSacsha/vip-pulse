@@ -110,3 +110,9 @@ class SpendingMeter:
         with self._lock:
             records, self._records = self._records, []
             return records
+
+
+def meter_of(provider: object) -> SpendingMeter | None:
+    """The spending meter of a paid provider; None for free stand-ins such as the fake."""
+    meter = getattr(provider, "meter", None)
+    return meter if isinstance(meter, SpendingMeter) else None
