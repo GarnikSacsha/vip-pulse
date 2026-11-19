@@ -19,7 +19,7 @@ One-page brief (in Russian): [docs/brief.md](docs/brief.md).
 
 | Role | What they get |
 |---|---|
-| **VIP manager** (primary) | "Who do I answer first and what do I say?" A three-pane inbox: the queue sorted by urgency and waiting time, the conversation, and its analysis with the reason for each priority, a suggested next step and numbered links to the messages that justify it. A player tab shows the dossier. |
+| **VIP manager** (primary) | "Who do I answer first and what do I say?" A three-pane inbox: the queue sorted by urgency and waiting time, the conversation, and its analysis with the reason for each priority, a suggested next step and numbered links to the messages that justify it. «Связаться лично» alerts (e.g. a possible second account). «Кого вернуть» (`/winback`): silent and slipping players, including those never contacted. A player tab shows the dossier. |
 | Team lead (`/lead`) | SLA lanes (Горит / Скоро нарушится / Ждёт / Всё ок), escalations, manager mistakes such as offers to vulnerable players, workload per manager with a link to their queue. |
 | Head of VIP (`/overview`) | Headline numbers, replies within SLA, categories and channels, and where the numbers come from. Computed from the same queue, nothing hard-coded. |
 
@@ -129,6 +129,7 @@ products ([decision 0008](docs/decisions/0008-gemini-provider-and-spending-cap.m
 |---|---|---|
 | GET | `/api/meta` | Dataset date, provider with its label and budget, counts by status and priority |
 | GET | `/api/queue?status=&priority=&route=&manager=&player=&overdue=` | Work items, most urgent first; `overdue` = active and past the channel SLA; `sla_lane` per item |
+| GET | `/api/winback?manager=` | Players to win back: tier, reasons, next step, latest conversation |
 | GET | `/api/overview` | Totals, workload per manager, categories, channels, routes, analysis coverage |
 | GET | `/api/conversations/{id}` | Messages (evidence and pending marked), analysis, task, reasons, facts |
 | PATCH | `/api/tasks/{id}` | Change status (`open`, `in_progress`, `resolved`) with an optional note |
@@ -157,15 +158,18 @@ CI runs all of them (Python 3.12 and 3.14, Node 24) and blocks commits that cont
 40 conversations, 50 players (`data/input/`, not in Git), analysed by `gemini-3.8-flash` for
 $0.052, 40/40 valid answers.
 
-- **Queue:** 9 × P0, 9 × P1, 5 × P2, 17 × P3; 6 conversations routed to the responsible-gaming
+- **Queue:** 9 × P0, 10 × P1, 5 × P2, 16 × P3; 6 conversations routed to the responsible-gaming
   specialist.
 - **Manager mistakes flagged:** a bonus for a player writing about heavy losses, cashback offered
   to a player asking to be blocked, a deposit bonus and a hint at a higher limit for a player who
   set a limit. A manager who refused bonuses and set a limit is not flagged.
 - **Found by the model, not by keywords:** a VIP called by the wrong name twice, inaccurate bonus
   terms, a player chasing losses with bonuses.
-- **Missed:** a request for a bonus on another account paid with the same card (possible
-  multi-accounting) got a low priority. Bonus abuse is not a rule yet.
+- **Personal-contact alert:** a request for a bonus on another account paid with the same card
+  (possible multi-accounting) now raises «Связаться лично» (P1); the model alone gave it a low
+  priority.
+- **Who to win back:** 16 players, 4 urgent (no login for 2–4 weeks or stopped depositing; two of
+  them were never contacted), 5 with a sharp deposit drop, 7 active VIPs never contacted.
 
 ## Measuring analysis quality
 
@@ -218,7 +222,7 @@ docs/
 | Done | Next |
 |---|---|
 | Import with validation report, dedupe, idempotent re-import | Labelled task conversations to measure quality |
-| Deterministic facts, SLA, safety net, priority with reasons | Multi-account / bonus-abuse signal (missed by the model on the task files) |
+| Deterministic facts, SLA, safety net, priority with reasons | Model field for bonus abuse, checked by code (keywords are a safety net only) |
 | Strict LLM contract, fail-closed evidence check, prompt-injection fencing | Screenshots, one-page brief and demo video |
 | Analysis cache, work items, status history | |
 | Three-pane inbox, evidence pills, player dossier, pulse indicator | |
@@ -227,6 +231,7 @@ docs/
 | Team lead SLA lanes and head-of-VIP view | |
 | Task files: `task_v1` adapter, analysed by Gemini | |
 | Player signals: account restrictions, payment problems, deposit trends | |
+| «Связаться лично» alerts, «Кого вернуть» list | |
 
 ## Data and secrets
 
