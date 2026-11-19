@@ -190,3 +190,17 @@ def test_cli_triage_on_empty_db(tmp_path: Path, capsys) -> None:
     db_url = f"sqlite:///{(tmp_path / 'empty.db').as_posix()}"
     assert main(["triage", "--database-url", db_url]) == 1
     assert "run `import` first" in capsys.readouterr().err
+
+
+def test_unreadable_files_are_reported_not_raised(tmp_path: Path, sample_paths) -> None:
+    bad_players = tmp_path / "players.csv"
+    bad_players.write_bytes(b"player_id,display_name\np-001,\xff\xfe broken\n")
+    report = ingest(get_adapter("sample_v1"), bad_players, sample_paths[1]).report
+    assert report.players_kept == 0
+    assert any("cannot read players file" in i.reason for i in report.errors)
+
+    bad_dialogs = tmp_path / "dialogs.json"
+    bad_dialogs.write_bytes(b'{"dialogs": [\xff]}')
+    report = ingest(get_adapter("sample_v1"), sample_paths[0], bad_dialogs).report
+    assert report.conversations_kept == 0
+    assert any("cannot read dialogs file" in i.reason for i in report.errors)

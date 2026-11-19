@@ -43,6 +43,16 @@ class SampleV1Adapter:
         out.issues.append(IngestIssue(level=level, source=source, ref=ref, reason=reason))
 
     def _parse_players(self, path: Path, out: ParsedSource) -> None:
+        try:
+            self._read_players(path, out)
+        except (OSError, UnicodeDecodeError, csv.Error) as exc:
+            # A file we cannot fully read is not trusted partially: drop what was parsed.
+            out.players.clear()
+            self._issue(
+                out, IssueLevel.ERROR, "players", path.name, f"cannot read players file: {exc}"
+            )
+
+    def _read_players(self, path: Path, out: ParsedSource) -> None:
         with path.open(encoding="utf-8-sig", newline="") as handle:
             for row_no, row in enumerate(csv.DictReader(handle), start=2):  # 1 = header
                 out.players_read += 1
@@ -65,7 +75,14 @@ class SampleV1Adapter:
 
     def _parse_dialogs(self, path: Path, out: ParsedSource) -> None:
         try:
-            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+            text = path.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeDecodeError) as exc:
+            self._issue(
+                out, IssueLevel.ERROR, "dialogs", path.name, f"cannot read dialogs file: {exc}"
+            )
+            return
+        try:
+            payload = json.loads(text)
         except json.JSONDecodeError as exc:
             self._issue(out, IssueLevel.ERROR, "dialogs", path.name, f"invalid JSON: {exc}")
             return
