@@ -1,6 +1,6 @@
 # Decision record: Gemini provider and spending cap
 
-- Status: accepted (Denys, 2026-11-19), with one open point (API tier, below)
+- Status: accepted (Denys, 2026-11-19). API tier resolved the same day (below)
 - Date: 2026-11-19
 - Scope: `backend/app/analysis/llm/`, `backend/app/tasks/service.py`, `backend/app/config.py`
 
@@ -57,7 +57,10 @@ decision.
 
 - **API tier for the task files.** On the free tier Google may use the content to improve its
   products. Recommended: a paid-tier key (billing enabled) with the $1 cap, or synthetic data
-  only on a free key. Until Denys confirms the tier, task files are not sent to Gemini.
+  only on a free key. **Resolved 2026-11-19:** billing is enabled on the key and Denys approved
+  sending the task files. One run of the 40 task conversations cost $0.052. The ledger lives in
+  each database, so the task database runs with `LLM_BUDGET_USD=0.96` to keep the total across
+  both databases under $1.
 
 ## Consequences
 

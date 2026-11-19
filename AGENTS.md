@@ -101,12 +101,14 @@ system temp directory on the dev machine cannot be cleaned by pytest.
 - Stage 1 (backend foundation): PR #1, merged. Built before the harness was read: tests were
   written after the code, no RED evidence. Corrective commits in the same PR.
 - Stage 2a (browser slice): PR #2, merged. Persisted analyses, tasks + audit, REST API, React UI.
-- Stage 2b: Gemini provider, spending cap, bounded concurrency: PR #3, merged. Real-data
-  adapter and data contract wait for the files.
+- Stage 2b: Gemini provider, spending cap, bounded concurrency: PR #3, merged.
 - Stage 2c (team lead and head-of-VIP views): PR #4, merged.
-- Stage 3 (UI design from `design/README.md`): branch `feat/stage-3-ui-design`. Fonts are
-  self-hosted assets in `frontend/public/fonts/` (approved by Denys, 2026-11-19), not npm packages.
-  Strict TDD with RED/GREEN evidence recorded in the PR.
+- Stage 3 (UI design from `design/README.md`): PR #5, merged. Fonts are self-hosted assets in
+  `frontend/public/fonts/` (approved by Denys, 2026-11-19), not npm packages.
+- Gold set and `eval` command: PR #6, merged. Task-file adapter `task_v1`: PR #7, merged.
+- Player signals (decision 0011): PR #8. Then: one-page brief, screenshots, demo.
+- Deadline: task received 2026-11-18, submission 2026-11-20.
+- Strict TDD with RED/GREEN evidence recorded in every PR.
 - Commit map: written before each stage; one atomic GREEN commit per coherent outcome.
 - Local-commit authorization: granted for agreed stages.
 - Push authorization: granted after each step (Denys, 2026-11-19).
@@ -118,8 +120,9 @@ system temp directory on the dev machine cannot be cleaned by pytest.
 - Excluded from Git: `.env`, `data/input/*`, `*.db`, `*.sqlite*`, caches, `node_modules/`.
   CI job "No secrets or real data" enforces the first two.
 - Data class: task files are fictional but belong to the employer → treat as internal; do not
-  publish them. Sending them to Gemini: see `docs/decisions/0008`; blocked until Denys confirms
-  the API tier (the free tier lets Google use the content).
+  publish them; describe results only in aggregate (the repository is public). Sending them to
+  Gemini: approved by Denys 2026-11-19 on a billed key (decision 0008). The task database runs with
+  `LLM_BUDGET_USD=0.96` so the total across databases stays under $1.
 - Paid LLM calls: total cap $1 (`LLM_BUDGET_USD`, Denys, 2026-11-19), enforced in code by the
   spending meter and the `llm_calls` ledger. Raising it needs Denys's approval.
 - Production credentials: none. Network: GitHub, Linear, npm registry (installs)

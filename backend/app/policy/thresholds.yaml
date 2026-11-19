@@ -21,6 +21,10 @@ safety:
     - заблокируйте меня
     - закрыть аккаунт
     - не могу остановиться
+    - нужно остановиться
+    - заблокируйте мне
+    - проиграл зарплату
+    - в минусе
     - не могу перестать
     - зависимост
     - лудоман
@@ -46,6 +50,15 @@ safety:
     - unauthorized
     - stolen
 
+# Signals from the player's profile (players.csv columns kept by the adapter). Missing columns
+# give no signal. All of this is decided in code; the LLM never sees it.
+player:
+  restricted_statuses: [self_excluded, limit_set]  # no offers; self_excluded -> RG specialist
+  failed_deposits_7d: 3          # this many failed deposits in 7 days = money problem
+  pending_withdrawal_usd: 1000   # a payout this large is waiting = money problem
+  deposit_drop_share: 0.5        # deposits fell below half of the previous 30 days = churn risk
+  deposit_spike_ratio: 1.7       # deposits grew 1.7x or more = check for harm, human review
+
 # Words that make a message a promotional offer. Offers are never suggested to players with a
 # responsible-gaming signal, and a manager sending one is flagged as a quality issue.
 offers:
@@ -54,6 +67,10 @@ offers:
   - фри спин
   - кэшбэк
   - кешбек
+  - кешбэк
+  - кэшбек
+  - отыграешь
+  - отыграть
   - промокод
   - отыграться
   - bonus
@@ -61,3 +78,12 @@ offers:
   - freespin
   - cashback
   - promo
+  - reload
+  - релоад
+  # Pushing the player to play more by lifting a limit counts as an offer too.
+  - limit can be raised
+  - raise your limit
+  - increase your limit
+  - поднять лимит
+  - повысить лимит
+  - увеличить лимит

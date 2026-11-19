@@ -13,6 +13,7 @@ from app.analysis.llm.base import LLMProvider
 from app.analysis.service import analyze_conversation
 from app.policy.config import PolicyConfig
 from app.policy.facts import ConversationFacts, compute_facts, dataset_as_of
+from app.policy.player import player_signals
 from app.policy.priority import PriorityDecision, decide
 from app.policy.safety import detect_safety
 from app.schemas.analysis import AnalysisOutcome
@@ -54,7 +55,12 @@ def triage(
         else:
             outcome = analyzer(conv, player, facts)
         decision = decide(
-            facts, outcome.result, detect_safety(conv, cfg), cfg, simulated=outcome.simulated
+            facts,
+            outcome.result,
+            detect_safety(conv, cfg),
+            cfg,
+            simulated=outcome.simulated,
+            player=player_signals(player, conv, cfg),
         )
         items.append(
             TriageItem(

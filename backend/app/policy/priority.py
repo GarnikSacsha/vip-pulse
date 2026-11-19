@@ -1,6 +1,7 @@
 """Final priority for a conversation, with the reasons that produced it."""
 
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict
 
@@ -9,6 +10,9 @@ from app.policy.facts import ConversationFacts
 from app.policy.safety import SafetySignal
 from app.schemas.analysis import MONEY_CATEGORIES, LLMAnalysis, Priority, SafetyFlag, Urgency
 
+if TYPE_CHECKING:
+    from app.policy.player import PlayerSignals
+
 SAFE_RG_ACTION = (
     "Не предлагать бонусы и акции. Подтвердить игроку, что запрос получен, и передать "
     "специалисту по ответственной игре (самоисключение / ограничения)."
@@ -16,6 +20,10 @@ SAFE_RG_ACTION = (
 SAFE_FRAUD_ACTION = (
     "Передать в службу безопасности: проверить входы и платежи, при необходимости "
     "заблокировать сессии. Подтвердить игроку, что запрос в работе."
+)
+SAFE_RESTRICTED_ACTION = (
+    "Не предлагать бонусы и акции: на аккаунте игрока стоят ограничения. Ответить по существу "
+    "запроса."
 )
 FALLBACK_ACTION = (
     "Автоматический разбор недоступен: прочитать переписку вручную и определить следующий шаг."
@@ -62,6 +70,7 @@ def decide(
     cfg: PolicyConfig,
     *,
     simulated: bool,
+    player: "PlayerSignals | None" = None,
 ) -> PriorityDecision:
     source = LABEL_SIMULATED if simulated else LABEL_MODEL
     reasons: list[Reason] = []
@@ -90,12 +99,43 @@ def decide(
     elif flag == SafetyFlag.FRAUD_SECURITY:
         route, review = Route.SECURITY, True
         bump(Priority.P0, "safety.fraud_security", f"Возможный взлом или мошенничество{suffix}")
-    if safety.offer_after_rg_message_ids:
+    # 1b. The player's profile: an account restriction is a safety fact, like a keyword hit.
+    if player is not None and player.restricted:
+        label = {"self_excluded": "самоисключение", "limit_set": "установлен лимит"}.get(
+            player.restricted, player.restricted
+        )
+        review = True
+        if player.self_excluded:
+            route = Route.RG_SPECIALIST
+            bump(Priority.P0, "player.restricted", f"Аккаунт игрока: {label}")
+        else:
+            reasons.append(Reason(code="player.restricted", text=f"Аккаунт игрока: {label}"))
+        if player.offer_message_ids:
+            quality.append("offer_to_restricted_player")
+            bump(
+                Priority.P1,
+                "quality.offer_to_restricted_player",
+                f"Менеджер предложил бонус игроку с ограничением ({label})",
+            )
+
+    offers_after_rg = safety.offer_after_rg_message_ids
+    model_sourced = False
+    if (
+        safety.flag == SafetyFlag.NONE
+        and flag == SafetyFlag.RESPONSIBLE_GAMING
+        and analysis is not None
+    ):
+        # Only the analysis found the signal: offers after the player messages it cites.
+        cited = [m for m in analysis.evidence_message_ids if m in safety.player_message_ids]
+        offers_after_rg = safety.offers_after(cited)
+        model_sourced = bool(offers_after_rg)
+    if offers_after_rg:
         quality.append("offer_to_vulnerable_player")
         reasons.append(
             Reason(
                 code="quality.offer_to_vulnerable_player",
-                text="Менеджер предложил бонус игроку с сигналом ответственной игры",
+                text="Менеджер предложил бонус игроку с сигналом ответственной игры"
+                + (f" ({source})" if model_sourced else ""),
             )
         )
 
@@ -127,6 +167,16 @@ def decide(
         else:
             bump(Priority.P2, "sla.awaiting_reply", "Последнее сообщение от игрока, ответа нет")
 
+    # 2b. Money problems and trends from the profile (code, not the model).
+    if player is not None:
+        # P1 only when the player waits for an answer that is actually needed.
+        answer_needed = facts.awaiting_reply and (analysis is None or analysis.requires_action)
+        for reason in player.money_reasons:
+            bump(Priority.P1 if answer_needed else Priority.P2, reason.code, reason.text)
+        for reason in player.trend_reasons:
+            bump(Priority.P2, reason.code, reason.text)
+        review = review or player.needs_review
+
     # 3. Meaning from the LLM, or a conservative fallback when it is unavailable.
     if analysis is None:
         review = True
@@ -152,8 +202,11 @@ def decide(
         next_action = analysis.next_action
 
     # 4. Guardrails on the suggested next step.
-    suppress_offers = route == Route.RG_SPECIALIST
-    if suppress_offers and (next_action is None or contains_any(next_action, cfg.offers)):
+    rg = route == Route.RG_SPECIALIST
+    restricted = player is not None and player.restricted is not None
+    suppress_offers = rg or restricted
+    offer_advice = next_action is not None and contains_any(next_action, cfg.offers)
+    if suppress_offers and (offer_advice or (rg and next_action is None)):
         if next_action is not None:
             reasons.append(
                 Reason(
@@ -161,7 +214,7 @@ def decide(
                     text="Совет упоминал бонусы и заменён безопасным шаблоном",
                 )
             )
-        next_action = SAFE_RG_ACTION
+        next_action = SAFE_RG_ACTION if rg else SAFE_RESTRICTED_ACTION
     elif route == Route.SECURITY and next_action is None:
         next_action = SAFE_FRAUD_ACTION
 
