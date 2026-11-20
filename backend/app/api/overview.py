@@ -44,7 +44,8 @@ def _totals(items: list[QueueItem]) -> OverviewTotals:
         overdue=sum(i.overdue for i in active),
         awaiting_reply=sum(i.awaiting_reply for i in active),
         escalated=sum(i.route != Route.MANAGER for i in active),
-        quality_issues=sum(bool(i.quality_flags) for i in active),
+        # Mistakes are about how a contact went, so closed conversations count too.
+        quality_issues=sum(bool(i.quality_flags or i.manager_errors) for i in items),
         needs_review=sum(i.requires_review for i in active),
         resolved=sum(i.status == TaskStatus.RESOLVED for i in items),
         no_action=sum(i.status == TaskStatus.NO_ACTION for i in items),
@@ -68,6 +69,7 @@ def _managers(items: list[QueueItem]) -> list[ManagerLoad]:
                 critical=sum(i.priority == Priority.P0 for i in active),
                 overdue=sum(i.overdue for i in active),
                 oldest_wait_hours=max(waits) if waits else None,
+                errors=sum(len(i.quality_flags) + len(i.manager_errors) for i in group),
             )
         )
     # Players without a manager last: they are the gap the lead must close.

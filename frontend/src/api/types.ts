@@ -51,6 +51,21 @@ export interface Reason {
   text: string;
 }
 
+/** Mistakes in how a manager handled a contact, found by the analysis (closed list). */
+export type ManagerErrorCode =
+  | "canned_reply"
+  | "rude_tone"
+  | "wrong_info"
+  | "incomplete_answer"
+  | "wrong_name"
+  | "broken_promise"
+  | "retention_pressure";
+
+export interface ManagerError {
+  code: ManagerErrorCode;
+  evidence_message_ids: string[]; // manager messages that show the mistake
+}
+
 export interface QueueItem {
   task_id: number;
   conversation_id: string;
@@ -72,7 +87,8 @@ export interface QueueItem {
   /** "breached" exactly when overdue. */
   sla_lane: SlaLane;
   requires_review: boolean;
-  quality_flags: string[];
+  quality_flags: string[]; // counted by code
+  manager_errors: ManagerError[]; // found by the analysis
   /** Personal-contact alerts from the policy, e.g. "multi_account". */
   alerts: string[];
   reasons: Reason[];
@@ -98,6 +114,7 @@ export interface AnalysisOut {
   confidence: number | null;
   safety_flag: "none" | "responsible_gaming" | "fraud_security" | null;
   needs_escalation: boolean | null;
+  manager_errors: ManagerError[];
   model: string | null;
   simulated: boolean;
   label: string;
@@ -179,6 +196,7 @@ export interface ManagerLoad {
   critical: number;
   overdue: number;
   oldest_wait_hours: number | null;
+  errors: number; // code flags + analysis findings, all conversations
 }
 
 export interface CategoryCount {

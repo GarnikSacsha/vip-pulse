@@ -3,6 +3,7 @@
 # Each field lists every acceptable answer: where a careful human could go either way, both count.
 # Fields: category, requires_action, safety_flag, sentiment; `cite` = at least one of these
 # message ids must be among the model's evidence (checked only when the model must cite).
+# manager_errors: acceptable sets of manager-error codes (closed taxonomy, see LLMAnalysis).
 
 d-001:  # withdrawal unanswered for a day, threat to leave
   category: [withdrawal]
@@ -10,46 +11,56 @@ d-001:  # withdrawal unanswered for a day, threat to leave
   safety_flag: [none]
   sentiment: [negative]
   cite: [m-001-1, m-001-3]
+  manager_errors: [[broken_promise]]  # promised to come back today, did not
 d-002:  # deposit delay, solved, player thanks
   category: [deposit]
   requires_action: [false]
   safety_flag: [none]
   sentiment: [positive, mixed]
+  manager_errors: [[]]
 d-003:  # birthday greeting, player thanks
   category: [general]
   requires_action: [false]
   safety_flag: [none]
   sentiment: [positive]
+  manager_errors: [[]]
 d-004:  # asks for self-exclusion; manager offered free spins
   category: [responsible_gaming]
   requires_action: [true]
   safety_flag: [responsible_gaming]
   sentiment: [negative]
   cite: [m-004-1]
+  # Bonus itself is flagged by code; ignoring the block request is an incomplete answer.
+  manager_errors: [[], [retention_pressure], [incomplete_answer], [incomplete_answer, retention_pressure]]
 d-005:  # verification pending, blocks withdrawal
   category: [verification]
   requires_action: [true]
   safety_flag: [none]
   sentiment: [neutral, negative]
   cite: [m-005-1, m-005-3]
+  manager_errors: [[incomplete_answer]]  # asked when, got no date
 d-006:  # app crashes; manager gave instructions, ball is with the player
   category: [technical]
   requires_action: [false, true]
   safety_flag: [none]
   sentiment: [negative, neutral]
+  manager_errors: [[]]
 d-007:  # a single "?"
   category: [other, general]
   requires_action: [true, false]
   safety_flag: [none]
   sentiment: [neutral]
+  manager_errors: [[]]
 d-009:  # login from an unknown device, "it was not me"
   category: [account]
   requires_action: [true]
   safety_flag: [fraud_security]
   sentiment: [negative]
   cite: [m-009-1]
+  manager_errors: [[]]
 d-010:  # manager offers a tournament, no reply yet
   category: [general, other]
   requires_action: [false]
   safety_flag: [none]
   sentiment: [neutral]
+  manager_errors: [[]]

@@ -5,7 +5,7 @@ import { Tag } from "../components/Badges";
 import { CompactItem, ErrorBox, KpiList, LoadingBlocks, Panel } from "../components/Oversight";
 import { Pulse } from "../components/Pulse";
 import { formatWait } from "../lib/format";
-import { CATEGORY_LABEL, SLA_LANE_LABEL } from "../lib/labels";
+import { CATEGORY_LABEL, MANAGER_ERROR_LABEL, SLA_LANE_LABEL, qualityFlagLabel } from "../lib/labels";
 import { useApi } from "../lib/useApi";
 
 interface Group {
@@ -31,12 +31,6 @@ const GROUPS: Group[] = [
     pick: (i) => i.route !== "manager",
   },
   {
-    id: "quality",
-    title: "Ошибки менеджеров",
-    description: "Например, бонус игроку с сигналом ответственной игры.",
-    pick: (i) => i.quality_flags.length > 0,
-  },
-  {
     id: "review",
     title: "Нужна ручная проверка",
     description: "Автоматический разбор не выполнен или неуверен.",
@@ -47,8 +41,10 @@ const GROUPS: Group[] = [
 export function LeadPage() {
   const overview = useApi(() => api.overview(), "overview");
   const active = useApi(() => api.queue({ status: ["open", "in_progress"] }), "lead-active");
+  // Mistakes are about how a contact went, so closed conversations count too.
+  const all = useApi(() => api.queue({}), "lead-all");
 
-  const error = overview.error ?? active.error;
+  const error = overview.error ?? active.error ?? all.error;
   if (error) {
     return (
       <ErrorBox
@@ -56,6 +52,7 @@ export function LeadPage() {
         onRetry={() => {
           overview.reload();
           active.reload();
+          all.reload();
         }}
       />
     );
@@ -70,27 +67,115 @@ export function LeadPage() {
         </p>
       </div>
 
-      {!overview.data || !active.data ? (
+      {!overview.data || !active.data || !all.data ? (
         <LoadingBlocks />
       ) : (
-        <LeadBody overview={overview.data} active={active.data} />
+        <LeadBody overview={overview.data} active={active.data} all={all.data} />
       )}
     </section>
   );
 }
 
-function LeadBody({ overview, active }: { overview: Overview; active: QueueItem[] }) {
+function LeadBody({ overview, active, all }: { overview: Overview; active: QueueItem[]; all: QueueItem[] }) {
   return (
     <>
       <LeadKpis overview={overview} />
       <SlaBoard items={active} />
       <Workload managers={overview.managers} />
+      <ManagerMistakes items={all} />
       <div className="grid gap-4 lg:grid-cols-2">
         {GROUPS.map((g) => (
           <ExceptionGroup key={g.id} group={g} items={active.filter(g.pick)} />
         ))}
       </div>
     </>
+  );
+}
+
+interface Mistake {
+  key: string;
+  label: string;
+  source: "code" | "analysis";
+  item: QueueItem;
+  messageId: string | null;
+}
+
+function mistakesOf(item: QueueItem): Mistake[] {
+  const byCode: Mistake[] = item.quality_flags.map((f) => ({
+    key: `${item.task_id}:${f}`,
+    label: qualityFlagLabel(f),
+    source: "code",
+    item,
+    messageId: null,
+  }));
+  const byAnalysis: Mistake[] = item.manager_errors.map((e) => ({
+    key: `${item.task_id}:${e.code}`,
+    label: MANAGER_ERROR_LABEL[e.code],
+    source: "analysis",
+    item,
+    messageId: e.evidence_message_ids[0] ?? null,
+  }));
+  return [...byCode, ...byAnalysis];
+}
+
+/** Manager mistakes by manager: the bonus rule (code) and what the analysis found in the text. */
+function ManagerMistakes({ items }: { items: QueueItem[] }) {
+  const groups = new Map<string, Mistake[]>();
+  for (const item of items) {
+    for (const m of mistakesOf(item)) {
+      const manager = item.player.manager_id ?? "Без менеджера";
+      groups.set(manager, [...(groups.get(manager) ?? []), m]);
+    }
+  }
+  const total = [...groups.values()].reduce((n, g) => n + g.length, 0);
+  return (
+    <Panel
+      id="group-quality"
+      title={
+        <>
+          Ошибки менеджеров <span className="font-normal tabular-nums text-muted">· {total}</span>
+        </>
+      }
+      description="Бонус уязвимому игроку считает код. Остальное находит разбор переписки, ссылка ведёт на сообщение. Включая закрытые диалоги."
+    >
+      {total === 0 ? (
+        <p className="px-4 py-4 text-sm text-muted">Нет</p>
+      ) : (
+        <div className="grid gap-x-6 gap-y-4 px-4 py-3 sm:grid-cols-2 xl:grid-cols-3">
+          {[...groups.entries()]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([manager, list]) => (
+              <div key={manager} className="min-w-0">
+                <h3 className="text-sm font-semibold">
+                  {manager} <span className="font-normal tabular-nums text-muted">· {list.length}</span>
+                </h3>
+                <ul aria-label={manager} className="mt-1 space-y-1">
+                  {list.map((m) => {
+                    const to = `/queue/${encodeURIComponent(m.item.conversation_id)}${
+                      m.messageId ? `?msg=${encodeURIComponent(m.messageId)}` : ""
+                    }`;
+                    const name = m.item.player.display_name ?? m.item.player.player_id;
+                    return (
+                      <li key={m.key} className="text-sm">
+                        <Link to={to} className="hover:underline">
+                          <span className={m.source === "code" ? "text-danger" : ""}>{m.label}</span>
+                          <span className="text-muted"> · {name}</span>
+                        </Link>
+                        {m.item.simulated && (
+                          <>
+                            {" "}
+                            <Tag>демо</Tag>
+                          </>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+        </div>
+      )}
+    </Panel>
   );
 }
 
@@ -129,6 +214,7 @@ function Workload({ managers }: { managers: ManagerLoad[] }) {
                 <th className="px-3 py-2 text-right font-medium">Критичные</th>
                 <th className="px-3 py-2 text-right font-medium">Просрочено</th>
                 <th className="px-3 py-2 text-right font-medium">Дольше всех ждёт</th>
+                <th className="px-3 py-2 text-right font-medium">Ошибки</th>
                 <th className="px-4 py-2 text-right font-medium">Всего</th>
               </tr>
             </thead>
@@ -152,6 +238,7 @@ function Workload({ managers }: { managers: ManagerLoad[] }) {
                   <td className="px-3 py-2.5 text-right">{m.critical}</td>
                   <td className={`px-3 py-2.5 text-right ${m.overdue ? "font-medium text-danger" : ""}`}>{m.overdue}</td>
                   <td className="px-3 py-2.5 text-right">{formatWait(m.oldest_wait_hours)}</td>
+                  <td className={`px-3 py-2.5 text-right ${m.errors ? "font-medium text-danger" : ""}`}>{m.errors}</td>
                   <td className="px-4 py-2.5 text-right text-muted">{m.total}</td>
                 </tr>
               ))}

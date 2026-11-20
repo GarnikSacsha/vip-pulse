@@ -30,6 +30,7 @@ export function queueItem(overrides: Partial<QueueItem> = {}): QueueItem {
     sla_lane: "breached",
     requires_review: false,
     quality_flags: [],
+    manager_errors: [],
     alerts: [],
     reasons: [{ code: "sla.money_critical", text: "Финансовый запрос без ответа 27 ч (порог 24 ч)" }],
     last_message_at: "2026-11-11T10:00:00Z",
@@ -55,8 +56,8 @@ export const overview: Overview = {
     no_action: 4,
   },
   managers: [
-    { manager_id: "mgr-01", total: 5, active: 3, in_progress: 0, critical: 1, overdue: 1, oldest_wait_hours: 27 },
-    { manager_id: "mgr-02", total: 4, active: 2, in_progress: 0, critical: 2, overdue: 0, oldest_wait_hours: 5.75 },
+    { manager_id: "mgr-01", total: 5, active: 3, in_progress: 0, critical: 1, overdue: 1, oldest_wait_hours: 27, errors: 2 },
+    { manager_id: "mgr-02", total: 4, active: 2, in_progress: 0, critical: 2, overdue: 0, oldest_wait_hours: 5.75, errors: 1 },
   ],
   categories: [
     { category: "withdrawal", total: 1, active: 1 },
@@ -137,6 +138,7 @@ export function conversation(overrides: Partial<ConversationDetail> = {}): Conve
       confidence: 0.55,
       safety_flag: "none",
       needs_escalation: true,
+      manager_errors: [],
       model: "fake:heuristic-v1",
       simulated: true,
       label: "эвристика fake, без модели",

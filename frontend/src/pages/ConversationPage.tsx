@@ -8,6 +8,7 @@ import { formatShort, formatWait } from "../lib/format";
 import {
   CATEGORY_LABEL,
   CHANNEL_LABEL,
+  MANAGER_ERROR_LABEL,
   PRIORITY_LABEL,
   ROUTE_LABEL,
   SENDER_LABEL,
@@ -141,7 +142,8 @@ function Conversation({
 }) {
   const { task, analysis, player } = data;
   const name = player.display_name ?? player.player_id;
-  const [hot, setHot] = useState<string | null>(null);
+  // A link can name a message (?msg=…), e.g. a manager mistake from the team lead page.
+  const [hot, setHot] = useState<string | null>(() => new URLSearchParams(search).get("msg"));
   // The inbox keeps the tab across conversations; standalone, the pane keeps its own.
   const [localTab, setLocalTab] = useState<PaneTab>("analysis");
   const tab = pane ?? localTab;
@@ -508,7 +510,8 @@ function AnalysisCard({
       </Card>
     );
   }
-  const cited = messages.filter((m) => m.is_evidence).map((m) => m.message_id);
+  const errorIds = new Set(analysis.manager_errors.flatMap((e) => e.evidence_message_ids));
+  const cited = messages.filter((m) => m.is_evidence && !errorIds.has(m.message_id)).map((m) => m.message_id);
   return (
     <Card
       title="Разбор"
@@ -542,6 +545,19 @@ function AnalysisCard({
           </>
         )}
       </dl>
+      {analysis.manager_errors.length > 0 && (
+        <div className="mt-3">
+          <p className="text-sm font-medium">Ошибки менеджера</p>
+          <ul aria-label="Ошибки менеджера" className="mt-1 space-y-1 text-sm">
+            {analysis.manager_errors.map((e) => (
+              <li key={e.code}>
+                {MANAGER_ERROR_LABEL[e.code]}
+                <Pills ids={e.evidence_message_ids} highlight={highlight} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <p className="mt-3 text-xs text-muted">{`Источник: ${analysis.label}`}</p>
     </Card>
   );

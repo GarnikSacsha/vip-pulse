@@ -30,7 +30,7 @@ from app.policy.config import PolicyConfig
 from app.policy.facts import compute_facts
 from app.policy.priority import LABEL_MODEL, LABEL_SIMULATED, Route
 from app.policy.sla import sla_lane
-from app.schemas.analysis import Priority, ProcessingStatus
+from app.schemas.analysis import ManagerError, Priority, ProcessingStatus
 from app.tasks.service import TaskStatus, ledger_spent
 
 router = APIRouter(prefix="/api", tags=["queue"])
@@ -129,6 +129,11 @@ def is_overdue(task: TaskRow) -> bool:
     )
 
 
+def _manager_errors(result: dict[str, Any]) -> list[ManagerError]:
+    """Mistakes stored with the analysis. Older analyses (before prompt v4) have none."""
+    return [ManagerError.model_validate(e) for e in result.get("manager_errors") or []]
+
+
 def list_queue(
     session: Session,
     *,
@@ -202,6 +207,7 @@ def list_queue(
                 alerts=alerts_of(task),
                 requires_review=task.requires_review,
                 quality_flags=task.quality_flags,
+                manager_errors=_manager_errors(result),
                 reasons=[ReasonOut(**r) for r in task.reasons],
                 last_message_at=conv.last_message_at,
                 simulated=bool(analysis and analysis.simulated),
@@ -229,7 +235,9 @@ def conversation_detail(
     as_of = _as_of(session) or conv.last_message_at
     facts = compute_facts(conv, as_of, policy.sla)
     result = _result(analysis)
+    errors = _manager_errors(result)
     evidence = set(result.get("evidence_message_ids", []))
+    evidence.update(i for e in errors for i in e.evidence_message_ids)
     pending = set(facts.pending_message_ids)
 
     analysis_out = None
@@ -244,6 +252,7 @@ def conversation_detail(
             confidence=result.get("confidence"),
             safety_flag=result.get("safety_flag"),
             needs_escalation=result.get("needs_escalation"),
+            manager_errors=errors,
             model=analysis.model,
             simulated=analysis.simulated,
             label=_label(analysis.simulated),

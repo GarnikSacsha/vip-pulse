@@ -177,6 +177,7 @@ describe("conversation page", () => {
           confidence: null,
           safety_flag: null,
           needs_escalation: null,
+          manager_errors: [],
           model: "gemini:gemini-2.5-flash",
           simulated: false,
           label: "AI",
@@ -337,3 +338,32 @@ describe("conversation pane: manager alerts", () => {
   });
 });
 
+
+describe("conversation pane: manager mistakes", () => {
+  it("shows mistakes found by the analysis with a pill to the message", async () => {
+    const base = detail();
+    serve({
+      ...base,
+      messages: base.messages.map((m) => (m.message_id === "m-001-2" ? { ...m, is_evidence: true } : m)),
+      analysis: base.analysis && {
+        ...base.analysis,
+        manager_errors: [{ code: "broken_promise", evidence_message_ids: ["m-001-2"] }],
+      },
+    });
+    renderPage();
+    const mistakes = await screen.findByRole("list", { name: "Ошибки менеджера" });
+    expect(within(mistakes).getByText("Обещал вернуться и не вернулся")).toBeInTheDocument();
+    expect(within(mistakes).getByRole("button", { name: /Сообщение 2/ })).toBeInTheDocument();
+  });
+
+  it("highlights the message named in the link", async () => {
+    serve(detail());
+    render(
+      <MemoryRouter initialEntries={["/conversations/d-001?msg=m-001-2"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    const timeline = await screen.findByRole("list", { name: "Переписка" });
+    expect(timeline.querySelector("#msg-m-001-2")).toHaveAttribute("data-highlighted", "true");
+  });
+});

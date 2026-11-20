@@ -155,3 +155,39 @@ describe("team lead page: lanes and labels agree", () => {
     expect(board).not.toHaveTextContent("SLA на исходе");
   });
 });
+
+describe("team lead page: manager mistakes", () => {
+  it("lists mistakes by manager with their type and a link to the message", async () => {
+    const promise = queueItem({
+      task_id: 21,
+      conversation_id: "d-001",
+      status: "resolved",
+      manager_errors: [{ code: "broken_promise", evidence_message_ids: ["m-001-2"] }],
+    });
+    const bonus = queueItem({
+      task_id: 22,
+      conversation_id: "d-004",
+      player: { player_id: "p-004", display_name: "Demo Player 004", manager_id: "mgr-02", segment: "platinum" },
+      quality_flags: ["offer_to_vulnerable_player"],
+    });
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [promise, bonus] });
+    renderLead();
+    const panel = await screen.findByRole("region", { name: /Ошибки менеджеров/ });
+    const mgr01 = within(panel).getByRole("list", { name: "mgr-01" });
+    expect(within(mgr01).getByRole("link", { name: /Обещал вернуться и не вернулся/ })).toHaveAttribute(
+      "href",
+      "/queue/d-001?msg=m-001-2",
+    );
+    const mgr02 = within(panel).getByRole("list", { name: "mgr-02" });
+    expect(within(mgr02).getByRole("link", { name: /Бонус уязвимому игроку/ })).toHaveAttribute("href", "/queue/d-004");
+  });
+
+  it("shows the number of mistakes per manager in the workload table", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [late] });
+    renderLead();
+    const table = await screen.findByRole("table", { name: "Нагрузка по менеджерам" });
+    expect(within(table).getByRole("columnheader", { name: "Ошибки" })).toBeInTheDocument();
+    const row = within(table).getByRole("row", { name: /mgr-02/ });
+    expect(within(row).getAllByRole("cell").map((c) => c.textContent)).toContain("1");
+  });
+});

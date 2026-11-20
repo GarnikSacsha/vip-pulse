@@ -106,7 +106,8 @@ def test_conversation_detail_marks_evidence(client: TestClient) -> None:
     body = client.get("/api/conversations/d-001").json()
     assert body["conversation_id"] == "d-001"
     assert [m["message_id"] for m in body["messages"]] == ["m-001-1", "m-001-2", "m-001-3"]
-    assert [m["is_evidence"] for m in body["messages"]] == [True, False, False]
+    # m-001-2: the broken promise the analysis cites as a manager mistake
+    assert [m["is_evidence"] for m in body["messages"]] == [True, True, False]
     assert [m["is_pending"] for m in body["messages"]] == [False, False, True]
     assert body["messages"][0]["sent_at"] == "2026-11-10T09:00:00Z"
     assert body["analysis"]["category"] == "withdrawal"
@@ -241,7 +242,7 @@ def test_overview_totals(client: TestClient) -> None:
         "overdue": 1,
         "awaiting_reply": 4,
         "escalated": 2,
-        "quality_issues": 1,
+        "quality_issues": 3,  # d-004 bonus (code), d-001 and d-005 (analysis)
         "needs_review": 2,
         "resolved": 0,
         "no_action": 4,
@@ -259,6 +260,7 @@ def test_overview_workload_by_manager(client: TestClient) -> None:
             "critical": 1,
             "overdue": 1,
             "oldest_wait_hours": 27.0,
+            "errors": 2,
         },
         {
             "manager_id": "mgr-02",
@@ -268,6 +270,7 @@ def test_overview_workload_by_manager(client: TestClient) -> None:
             "critical": 2,
             "overdue": 0,
             "oldest_wait_hours": 5.75,
+            "errors": 1,
         },
     ]
 
@@ -435,3 +438,23 @@ def test_winback_lists_candidates_and_filters_by_manager(client: TestClient) -> 
         assert item["reasons"]
     mine = client.get("/api/winback", params={"manager": "mgr-02"}).json()
     assert all(i["player"]["manager_id"] == "mgr-02" for i in mine)
+
+
+# --- manager mistakes found by the analysis -------------------------------------------------
+
+
+def test_queue_items_carry_manager_errors_with_evidence(client: TestClient) -> None:
+    items = {i["conversation_id"]: i for i in client.get("/api/queue").json()}
+    assert items["d-001"]["manager_errors"] == [
+        {"code": "broken_promise", "evidence_message_ids": ["m-001-2"]}
+    ]
+    assert items["d-002"]["manager_errors"] == []
+
+
+def test_conversation_marks_manager_error_messages_as_evidence(client: TestClient) -> None:
+    body = client.get("/api/conversations/d-005").json()
+    assert body["analysis"]["manager_errors"] == [
+        {"code": "incomplete_answer", "evidence_message_ids": ["m-005-2"]}
+    ]
+    cited = {m["message_id"]: m["is_evidence"] for m in body["messages"]}
+    assert cited["m-005-2"] is True

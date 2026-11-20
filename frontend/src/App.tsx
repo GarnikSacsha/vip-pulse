@@ -1,4 +1,4 @@
-import { NavLink, Navigate, Outlet, Route, Routes, useParams } from "react-router";
+import { NavLink, Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-router";
 import { api } from "./api/client";
 import { formatDateTime } from "./lib/format";
 import { ConversationPane, NoConversation } from "./pages/ConversationPage";
@@ -86,7 +86,8 @@ function Contained() {
 /** Old /conversations/:id links (bookmarks, earlier builds) open in the inbox. */
 function ToInbox() {
   const { id = "" } = useParams();
-  return <Navigate to={`/queue/${encodeURIComponent(id)}`} replace />;
+  const { search } = useLocation();
+  return <Navigate to={`/queue/${encodeURIComponent(id)}${search}`} replace />;
 }
 
 export function AppRoutes() {

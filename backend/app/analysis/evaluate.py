@@ -10,6 +10,8 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.analysis import ManagerErrorCode
+
 FIELDS = ("category", "requires_action", "safety_flag", "sentiment")
 
 
@@ -24,6 +26,8 @@ class GoldLabel(BaseModel):
     sentiment: list[str]
     # At least one of these must be cited when the model has to cite (action or safety flag).
     cite: list[str] = Field(default_factory=list)
+    # Acceptable sets of manager-error codes; None = not labelled, not scored.
+    manager_errors: list[list[ManagerErrorCode]] | None = None
 
 
 class EvalReport(BaseModel):
@@ -48,7 +52,7 @@ def _show(value: Any) -> str:
 
 def evaluate(results: dict[str, dict[str, Any] | None], gold: dict[str, GoldLabel]) -> EvalReport:
     """Compare analysis results (LLMAnalysis as dicts, None when failed) with the gold set."""
-    names = (*FIELDS, "evidence")
+    names = (*FIELDS, "evidence", "manager_errors")
     correct = dict.fromkeys(names, 0)
     total = dict.fromkeys(names, 0)
     mismatches: list[tuple[str, str, str, str]] = []
@@ -61,7 +65,8 @@ def evaluate(results: dict[str, dict[str, Any] | None], gold: dict[str, GoldLabe
         if result is None:
             failed.append(cid)
             for name in names:
-                total[name] += 1
+                if name != "manager_errors" or label.manager_errors is not None:
+                    total[name] += 1
             if label.safety_flag != ["none"]:
                 safety_misses.append(cid)
             continue
@@ -82,11 +87,33 @@ def evaluate(results: dict[str, dict[str, Any] | None], gold: dict[str, GoldLabe
         else:
             mismatches.append((cid, "evidence", ", ".join(cited) or "-", " | ".join(label.cite)))
 
+        if label.manager_errors is not None:
+            total["manager_errors"] += 1
+            got_codes = {e.get("code") for e in result.get("manager_errors") or []}
+            if any(got_codes == {c.value for c in ok} for ok in label.manager_errors):
+                correct["manager_errors"] += 1
+            else:
+                mismatches.append(
+                    (
+                        cid,
+                        "manager_errors",
+                        ", ".join(sorted(map(str, got_codes))) or "-",
+                        " | ".join(
+                            ", ".join(c.value for c in ok) or "-" for ok in label.manager_errors
+                        ),
+                    )
+                )
+
         if "none" not in label.safety_flag and result.get("safety_flag") not in label.safety_flag:
             safety_misses.append(cid)
 
     return EvalReport(
-        scores={name: (correct[name], total[name]) for name in names},
+        # An unlabelled optional field is left out instead of showing 0/0.
+        scores={
+            name: (correct[name], total[name])
+            for name in names
+            if total[name] or name != "manager_errors"
+        },
         mismatches=mismatches,
         failed=failed,
         safety_misses=safety_misses,

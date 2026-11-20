@@ -1,4 +1,4 @@
-import type { Category, Channel, Priority, Route, SenderRole, Sentiment, SlaLane, TaskStatus } from "../api/types";
+import type { Category, Channel, ManagerErrorCode, Priority, Route, SenderRole, Sentiment, SlaLane, TaskStatus } from "../api/types";
 
 export const PRIORITY_LABEL: Record<Priority, string> = {
   P0: "Критично",
@@ -77,6 +77,16 @@ export const ALERT_TEXT: Record<string, { tag: string; title: string; action: st
 export function alertText(alert: string): { tag: string; title: string; action: string } {
   return ALERT_TEXT[alert] ?? { tag: "Связаться лично", title: alert, action: "Свяжитесь с игроком лично." };
 }
+
+export const MANAGER_ERROR_LABEL: Record<ManagerErrorCode, string> = {
+  canned_reply: "Шаблонная отписка",
+  rude_tone: "Грубый тон",
+  wrong_info: "Неверная информация",
+  incomplete_answer: "Вопрос без ответа по существу",
+  wrong_name: "Ошибка в имени или данных игрока",
+  broken_promise: "Обещал вернуться и не вернулся",
+  retention_pressure: "Давление: играть дальше или не выводить",
+};
 
 export function qualityFlagLabel(flag: string): string {
   return QUALITY_FLAG_LABEL[flag] ?? flag;

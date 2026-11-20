@@ -8,6 +8,7 @@ from app.policy.priority import Route
 from app.policy.sla import SlaLane
 from app.schemas.analysis import (
     Category,
+    ManagerError,
     Priority,
     ProcessingStatus,
     SafetyFlag,
@@ -90,7 +91,8 @@ class QueueItem(BaseModel):
     # Alerts for the manager to act personally, e.g. "multi_account" (from reasons "alert.*").
     alerts: list[str]
     requires_review: bool
-    quality_flags: list[str]
+    quality_flags: list[str]  # mistakes counted by code, e.g. a bonus to a vulnerable player
+    manager_errors: list[ManagerError]  # mistakes found by the analysis, with evidence
     reasons: list[ReasonOut]
     last_message_at: datetime
     simulated: bool
@@ -114,6 +116,7 @@ class AnalysisOut(BaseModel):
     confidence: float | None = None
     safety_flag: SafetyFlag | None = None
     needs_escalation: bool | None = None
+    manager_errors: list[ManagerError] = []
     model: str | None = None
     simulated: bool
     label: str
@@ -180,6 +183,7 @@ class ManagerLoad(BaseModel):
     critical: int
     overdue: int
     oldest_wait_hours: float | None  # longest wait among active items awaiting a reply
+    errors: int  # manager mistakes in all their conversations: code flags + analysis findings
 
 
 class CategoryCount(BaseModel):
