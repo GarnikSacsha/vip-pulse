@@ -15,6 +15,35 @@ human specialist.
 
 One-page brief (in Russian): [docs/brief.md](docs/brief.md).
 
+## Screenshots
+
+Synthetic sample (`data/sample/`), analysed by Gemini (`gemini-3.8-flash`). The task files are
+not shown here because the repository is public.
+
+**Manager inbox:** the queue sorted by urgency and waiting time, the conversation, and the
+analysis. The solid red ring means the player has waited past the channel SLA.
+
+![Manager inbox: queue, conversation, analysis](docs/screenshots/inbox.png)
+
+**Evidence and safety:** a player asks to be blocked, the manager offers free spins. Priority and
+route come from code; «Не предлагать бонусы» sits above the next step. Hovering a numbered pill
+lights up the message it cites.
+
+![Responsible-gaming case with evidence pills](docs/screenshots/evidence.png)
+
+**Team lead, SLA lanes:** what is burning, what will breach soon, what is with a specialist.
+
+![Team lead: SLA lanes](docs/screenshots/team-sla.png)
+
+**Team lead, workload and manager mistakes:** each mistake links to the message; «код» marks
+mistakes counted by rules, not by the model.
+
+![Team lead: workload and manager mistakes](docs/screenshots/team-mistakes.png)
+
+**Head of VIP:** headline numbers from the same queue and where they come from.
+
+![Head of VIP overview](docs/screenshots/overview.png)
+
 ## Who it is for
 
 | Role | What they get |
@@ -251,7 +280,7 @@ data/
   sample/       synthetic fixture, one edge case per dialog (committed)
   input/        real task files (git-ignored)
 docs/
-  architecture.md, decisions/
+  architecture.md, brief.md, decisions/, screenshots/
 ```
 
 ## Status
@@ -260,7 +289,7 @@ docs/
 |---|---|
 | Import with validation report, dedupe, idempotent re-import | Labelled task conversations to measure quality |
 | Deterministic facts, SLA, safety net, priority with reasons | Model field for bonus abuse, checked by code (keywords are a safety net only) |
-| Strict LLM contract, fail-closed evidence check, prompt-injection fencing | Screenshots and demo video |
+| Strict LLM contract, fail-closed evidence check, prompt-injection fencing | Demo video |
 | One-page brief ([docs/brief.md](docs/brief.md)) | Sign-in and real roles checked in the API |
 | Manager mistakes with evidence, specialist lane, demo roles | Reply draft for the manager to review only, never sent automatically |
 | Full player card, birthdays, win-back linked to the queue | |
@@ -268,6 +297,7 @@ docs/
 | Analysis cache, work items, status history | |
 | Three-pane inbox, evidence pills, player dossier, pulse indicator | |
 | Gold set and `eval` command (no LLM calls) | |
+| Screenshots of every view (synthetic sample) | |
 | Gemini provider: retries, parallel calls, $1 spending cap with a ledger | |
 | Team lead SLA lanes and head-of-VIP view | |
 | Task files: `task_v1` adapter, analysed by Gemini | |
