@@ -160,13 +160,14 @@ def decide(
             bump(
                 Priority.P0,
                 "sla.money_critical",
-                f"Финансовый запрос без ответа {wait:.0f} ч (порог {critical:g} ч)",
+                f"Финансовый запрос без ответа {wait:.0f} ч "
+                f"(порог эскалации финансового запроса: {critical:g} ч)",
             )
         elif facts.sla_breached:
             bump(
                 Priority.P1,
                 "sla.breached",
-                f"Игрок ждёт ответа {wait:.0f} ч (SLA {facts.response_sla_hours:g} ч)",
+                f"Игрок ждёт ответа {wait:.0f} ч (SLA канала: {facts.response_sla_hours:g} ч)",
             )
         else:
             bump(Priority.P2, "sla.awaiting_reply", "Последнее сообщение от игрока, ответа нет")

@@ -97,7 +97,8 @@ describe("conversation page", () => {
     expect(screen.getByText("Игрок ждёт вывод больше суток, менеджер не вернулся с ответом.")).toBeInTheDocument();
     expect(screen.getByText("Источник: эвристика fake, без модели")).toBeInTheDocument();
     expect(screen.getByText("1 д 3 ч")).toBeInTheDocument();
-    expect(screen.getByText("SLA 4 ч нарушен")).toBeInTheDocument();
+    expect(screen.getByText("SLA канала")).toBeInTheDocument();
+    expect(screen.getByText("4 ч, нарушен")).toBeInTheDocument();
   });
 
   it("warns not to offer bonuses in responsible-gaming cases", async () => {

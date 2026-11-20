@@ -33,7 +33,7 @@ export function queueItem(overrides: Partial<QueueItem> = {}): QueueItem {
     quality_flags: [],
     manager_errors: [],
     alerts: [],
-    reasons: [{ code: "sla.money_critical", text: "Финансовый запрос без ответа 27 ч (порог 24 ч)" }],
+    reasons: [{ code: "sla.money_critical", text: "Финансовый запрос без ответа 27 ч (порог эскалации финансового запроса: 24 ч)" }],
     last_message_at: "2026-11-11T10:00:00Z",
     simulated: true,
     ...overrides,
@@ -152,7 +152,7 @@ export function conversation(overrides: Partial<ConversationDetail> = {}): Conve
       route: "manager",
       next_action: "Проверить статус вывода у платёжной команды и сообщить игроку срок.",
       reasons: [
-        { code: "sla.money_critical", text: "Финансовый запрос без ответа 27 ч (порог 24 ч)" },
+        { code: "sla.money_critical", text: "Финансовый запрос без ответа 27 ч (порог эскалации финансового запроса: 24 ч)" },
         { code: "analysis.escalation", text: "Рекомендована эскалация (эвристика fake, без модели)" },
       ],
       quality_flags: [],

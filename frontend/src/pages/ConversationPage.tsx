@@ -581,11 +581,10 @@ function Facts({
           <span className="tabular-nums">{facts.awaiting_reply ? formatWait(facts.wait_hours) : "игрок не ждёт"}</span>
           {facts.awaiting_reply && <Pills ids={pending} highlight={highlight} />}
         </dd>
-        <dt className="text-muted">SLA</dt>
+        {/* The channel's response SLA. The money escalation threshold is a separate rule: see reasons. */}
+        <dt className="text-muted">SLA канала</dt>
         <dd className={facts.sla_breached ? "text-danger" : ""}>
-          {facts.sla_breached
-            ? `SLA ${facts.response_sla_hours} ч нарушен`
-            : `в пределах ${facts.response_sla_hours} ч`}
+          {`${facts.response_sla_hours} ч, ${facts.sla_breached ? "нарушен" : "в пределах"}`}
         </dd>
         {facts.median_response_minutes !== null && (
           <>
