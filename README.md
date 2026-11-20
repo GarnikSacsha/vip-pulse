@@ -36,14 +36,22 @@ One-page brief (in Russian): [docs/brief.md](docs/brief.md).
 - **The manager owns the status:** re-analysis never closes their work; a closed item reopens only
   when the player writes again.
 - **Manager mistakes:** rules count what they can (a bonus to a vulnerable or restricted player,
-  a late reply). The analysis adds the rest from a closed list (brush-off reply, rude tone, wrong
+  a reply later than the channel SLA, a player waiting past the SLA now; labelled «посчитано
+  кодом», [0019](docs/decisions/0019-rule-counted-mistakes.md)). The analysis adds the rest from a closed list (brush-off reply, rude tone, wrong
   information, question left unanswered, wrong name, broken promise, pressure to keep playing),
   each citing the manager's message; an answer without such a citation is rejected.
 
+- **One source for waiting:** «the player waits for the manager» is decided once
+  ([0017](docs/decisions/0017-one-source-for-waiting.md)): a «спасибо» the analysis marks as needing
+  no answer is never a wait or an SLA breach, and an escalated case waits for the specialist.
+  «Просрочен ответ» is exactly the «Горит» lane.
+
 **Roles are a demo, not authorisation.** The header switcher («Я: менеджер» / «Тимлид» /
 «Руководитель», labelled «демо-режим») only filters what the browser shows: a manager sees their
-own queue and win-back list. The API has no sign-in and serves every player to any caller
-([decision 0015](docs/decisions/0015-demo-roles.md)).
+own queue and win-back list (escalated cases show a neutral step; the lead sees the analysis);
+the head of VIP sees «Обзор», «Команда» and a read-only queue
+([0018](docs/decisions/0018-head-read-only-queue.md)). The API has no sign-in and serves every
+player to any caller ([0015](docs/decisions/0015-demo-roles.md)).
 
 Details: [architecture](docs/architecture.md) · [decision records](docs/decisions/).
 
@@ -103,9 +111,10 @@ adapter into a separate database ([decision 0010](docs/decisions/0010-task-data-
    «Разбор» tab, «Ошибки менеджера» shows «Обещал вернуться и не вернулся» with a pill to the message.
 4. **Take an item in progress, then resolve it:** the history records who did what, with the note.
 5. **Team (`/lead`):** d-001 is in the «Горит» lane, d-004 and d-009 are «У специалиста»;
-   «Ошибки менеджеров» lists d-004 (bonus, by rule), d-001 and d-005 (by analysis) per manager;
+   «Ошибки менеджеров» lists, per manager, d-004 (bonus) and d-001 (waiting past the SLA) as
+   «посчитано кодом», d-001 and d-005 by the analysis, each linked to the message;
    mgr-01 opens their own queue. **Overview (`/overview`):** 5 of 9 conversations need action,
-   3 of 4 waiting players are inside the SLA, and the page says the categories come from the demo
+   2 of 3 players waiting for a manager are inside the SLA, and the page says the categories come from the demo
    heuristic.
 6. **Switch the role** in the header to «Я: mgr-01»: only their queue and «Кого вернуть» remain.
 7. **Change a threshold** in `thresholds.yaml` (for example `critical_wait_hours: 24 → 48`) and run
@@ -171,21 +180,24 @@ CI runs all of them (Python 3.12 and 3.14, Node 24) and blocks commits that cont
 
 ## Results on the task files
 
-40 conversations, 50 players (`data/input/`, not in Git), analysed by `gemini-3.8-flash` for
-$0.052, 40/40 valid answers.
+40 conversations, 50 players (`data/input/`, not in Git), analysed by `gemini-3.8-flash` with
+prompt v4 on 2026-11-20 for $0.062, 40/40 valid answers (all runs on this database: $0.115 of
+the $0.96 cap).
 
-- **Queue:** 9 × P0, 10 × P1, 5 × P2, 16 × P3; 6 conversations routed to the responsible-gaming
-  specialist.
-- **Manager mistakes flagged:** a bonus for a player writing about heavy losses, cashback offered
-  to a player asking to be blocked, a deposit bonus and a hint at a higher limit for a player who
-  set a limit. A manager who refused bonuses and set a limit is not flagged.
-- **Found by the model, not by keywords:** a VIP called by the wrong name twice, inaccurate bonus
-  terms, a player chasing losses with bonuses. These were free text in the analysis (prompt v3);
-  since prompt v4 they are structured manager mistakes with a cited message. The task database
-  shows them after a re-run with Gemini (about $0.05, not run yet).
-- **Personal-contact alert:** a request for a bonus on another account paid with the same card
-  (possible multi-accounting) now raises «Связаться лично» (P1); the model alone gave it a low
-  priority.
+- **Queue:** 10 × P0, 7 × P1, 7 × P2, 16 × P3; 6 conversations routed to the responsible-gaming
+  specialist, 1 to security. 10 conversations are in «Горит»; «Просрочен ответ», the per-channel
+  and the per-manager overdue numbers all equal 10 ([decision 0017](docs/decisions/0017-one-source-for-waiting.md)).
+- **Manager mistakes: 35.** By rule: 3 bonuses to a vulnerable or restricted player (a bonus for
+  a player writing about heavy losses, cashback for a player asking to be blocked, a deposit
+  bonus and a hint at a higher limit for a player who set a limit), 2 replies later than the
+  channel SLA, 10 players waiting past the SLA now. By the model, each citing the manager's
+  message: 7 questions left unanswered, 5 pressure to keep playing, 4 brush-off replies, 2 rude
+  tone, 1 broken promise, 1 wrong name. A manager who refused bonuses and set a limit is not
+  flagged.
+- **A request for a bonus on another account paid with the same card** (possible
+  multi-accounting): with prompt v3 the model gave it a low priority and the rule raised
+  «Связаться лично» (P1). With prompt v4 the model flags it as fraud, so it goes to security as P0
+  and the alert yields to security, as decided in [0012](docs/decisions/0012-alerts-and-winback.md).
 - **Who to win back:** 14 players, 4 urgent (no login for 2–4 weeks or stopped depositing; two of
   them have no conversation yet), 5 with a sharp deposit drop, 5 active VIPs never contacted. Two
   players with a sharp deposit rise are left out: that is a harm-risk signal, not a reason for promo.
@@ -249,7 +261,8 @@ docs/
 | Strict LLM contract, fail-closed evidence check, prompt-injection fencing | Screenshots and demo video |
 | One-page brief ([docs/brief.md](docs/brief.md)) | Sign-in and real roles checked in the API |
 | Manager mistakes with evidence, specialist lane, demo roles | Reply draft for the manager to review only, never sent automatically |
-| Full player card, birthdays, win-back linked to the queue | Re-run the task files with prompt v4 (about $0.05) |
+| Full player card, birthdays, win-back linked to the queue | |
+| One source for waiting; mistakes counted by code; head of VIP read-only queue | |
 | Analysis cache, work items, status history | |
 | Three-pane inbox, evidence pills, player dossier, pulse indicator | |
 | Gold set and `eval` command (no LLM calls) | |

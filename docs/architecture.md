@@ -72,7 +72,10 @@ Full records with evidence and rejected alternatives are in [`docs/decisions/`](
 [0013 specialist lane](decisions/0013-specialist-lane.md),
 [0014 manager mistakes](decisions/0014-manager-errors.md),
 [0015 demo roles](decisions/0015-demo-roles.md),
-[0016 birthdays and open requests](decisions/0016-birthdays-and-open-requests.md).
+[0016 birthdays and open requests](decisions/0016-birthdays-and-open-requests.md),
+[0017 one source for waiting](decisions/0017-one-source-for-waiting.md),
+[0018 head of VIP read-only queue](decisions/0018-head-read-only-queue.md),
+[0019 mistakes counted by code](decisions/0019-rule-counted-mistakes.md).
 
 - **Adapter per format.** The real `dialogs.json` / `players.csv` were not available when the
   foundation was built. The internal model is ours; only a new adapter is needed for the real files.
@@ -111,5 +114,7 @@ Full records with evidence and rejected alternatives are in [`docs/decisions/`](
 7. **Done — manager audit fixes (2026-11-20):** specialist lane, manager mistakes from the
    analysis, demo roles, full player card, birthdays, win-back linked to the queue, thresholds
    re-read on change, JSON-only paid run.
-8. **Next:** sign-in and real roles checked in the API; reply drafts for the manager to review
+8. **Done — second audit round (2026-11-20):** one source for who owes a reply, mistakes
+   counted by code, read-only queue for the head of VIP, task files re-analysed with prompt v4.
+9. **Next:** sign-in and real roles checked in the API; reply drafts for the manager to review
    (never sent automatically); 10–20 labelled real conversations for `eval`.
