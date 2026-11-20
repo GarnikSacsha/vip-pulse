@@ -163,6 +163,9 @@ export function QueuePage() {
               <kbd className="font-mono">j</kbd>/<kbd className="font-mono">k</kbd> — следующий и предыдущий.
             </span>
           </p>
+          <p className="mt-0.5 text-xs text-muted">
+            Кружок: пустой — игрок не ждёт, кольцо заполняется к сроку SLA канала, закрашен с точкой — SLA нарушен.
+          </p>
           {manager && !roleManager && (
             <button
               type="button"
@@ -175,7 +178,7 @@ export function QueuePage() {
             </button>
           )}
 
-          <div role="tablist" className="mt-3 flex gap-4 overflow-x-auto border-b border-line text-sm">
+          <div role="tablist" className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-b border-line text-sm">
             {VIEWS.map((v) => {
               const isSelected = v.id === view.id;
               // Meta counts the whole department: wrong on one manager's queue, so hidden there.
@@ -349,8 +352,12 @@ function QueueRow({ item, search }: { item: QueueItem; search: string }) {
             item.sla_lane === "breached" ? "font-medium text-danger" : item.awaiting_reply ? "text-ink" : "text-muted"
           }`}
         >
-          {item.awaiting_reply ? formatWait(item.wait_hours) : "не ждёт"}
+          {item.awaiting_reply ? formatWait(item.wait_hours) : "ход за игроком"}
         </span>
+        {/* Why a long wait can still be low priority: nothing in the last message needs an answer. */}
+        {item.awaiting_reply && item.sla_lane === "ok" && (
+          <span className="text-right text-xs text-muted">не требует ответа</span>
+        )}
       </div>
     </NavLink>
   );

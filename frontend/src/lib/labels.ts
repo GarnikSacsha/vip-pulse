@@ -7,6 +7,14 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
   P3: "Низкий",
 };
 
+/** For «Приоритет: …» in a sentence. */
+export const PRIORITY_NAME: Record<Priority, string> = {
+  P0: "критичный",
+  P1: "высокий",
+  P2: "средний",
+  P3: "низкий",
+};
+
 export const CATEGORY_LABEL: Record<Category, string> = {
   withdrawal: "Вывод средств",
   deposit: "Депозит",

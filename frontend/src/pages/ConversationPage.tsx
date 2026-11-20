@@ -9,7 +9,7 @@ import {
   CATEGORY_LABEL,
   CHANNEL_LABEL,
   MANAGER_ERROR_LABEL,
-  PRIORITY_LABEL,
+  PRIORITY_NAME,
   ROUTE_LABEL,
   SENDER_LABEL,
   SENTIMENT_LABEL,
@@ -197,7 +197,7 @@ function Conversation({
             {task && (
               <div className="text-right text-sm">
                 <p className="font-medium">{`Статус: ${STATUS_LABEL[task.status]}`}</p>
-                <p className="text-muted">{PRIORITY_LABEL[task.priority]} приоритет</p>
+                <p className="text-muted">{`Приоритет: ${PRIORITY_NAME[task.priority]}`}</p>
               </div>
             )}
           </div>

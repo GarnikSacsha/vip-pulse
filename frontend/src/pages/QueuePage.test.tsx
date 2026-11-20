@@ -54,7 +54,7 @@ describe("queue page", () => {
     expect(within(row).getByText("Специалист по ответственной игре")).toBeInTheDocument();
     expect(within(row).getByText("Нужна проверка")).toBeInTheDocument();
     expect(within(row).getByText("Бонус уязвимому игроку")).toBeInTheDocument();
-    expect(within(row).getByText("не ждёт")).toBeInTheDocument();
+    expect(within(row).getByText("ход за игроком")).toBeInTheDocument();
   });
 
   it("switches views and priority filters through the URL", async () => {
@@ -306,3 +306,33 @@ describe("inbox: manager alerts", () => {
   });
 });
 
+
+describe("queue page: why a long wait is low priority", () => {
+  it("says the player's turn or that no answer is needed, and explains the rings", async () => {
+    const thanks = queueItem({
+      task_id: 30,
+      conversation_id: "d-030",
+      player: { player_id: "p-030", display_name: "Demo Player 030", manager_id: "mgr-01", segment: "gold" },
+      priority: "P3",
+      wait_hours: 143,
+      overdue: false,
+      sla_lane: "ok",
+    });
+    const theirTurn = queueItem({
+      task_id: 31,
+      conversation_id: "d-031",
+      player: { player_id: "p-031", display_name: "Demo Player 031", manager_id: "mgr-01", segment: "gold" },
+      priority: "P2",
+      wait_hours: null,
+      awaiting_reply: false,
+      overdue: false,
+      sla_lane: "ok",
+    });
+    serveApi(vi, { "/api/meta": meta, "/api/queue": [thanks, theirTurn] });
+    renderQueue();
+    const [first, second] = await screen.findAllByRole("link", { name: /Demo Player 03/ });
+    expect(first).toHaveTextContent("не требует ответа");
+    expect(second).toHaveTextContent("ход за игроком");
+    expect(screen.getByText(/кольцо заполняется/)).toBeInTheDocument();
+  });
+});

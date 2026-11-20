@@ -368,3 +368,11 @@ describe("conversation pane: manager mistakes", () => {
     expect(timeline.querySelector("#msg-m-001-2")).toHaveAttribute("data-highlighted", "true");
   });
 });
+
+describe("conversation pane: wording", () => {
+  it("names the priority as «Приоритет: критичный»", async () => {
+    serve(detail());
+    renderPage();
+    expect(await screen.findByText("Приоритет: критичный")).toBeInTheDocument();
+  });
+});

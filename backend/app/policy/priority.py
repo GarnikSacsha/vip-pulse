@@ -29,6 +29,21 @@ SAFE_MULTI_ACCOUNT_ACTION = (
     "Связаться с игроком лично: уточнить, чей это аккаунт и чья карта. Ничего не начислять на "
     "другой аккаунт до проверки."
 )
+# Steps for a priority raised by the profile when the analysis saw nothing to do. First match
+# wins, money first. No offer words: these must stay safe for restricted players too.
+PROFILE_ACTIONS = (
+    ("player.pending_withdrawal", "Проверить вывод в ожидании и сообщить игроку срок зачисления."),
+    ("player.failed_deposits", "Проверить неудачные депозиты и помочь игроку с оплатой."),
+    (
+        "player.deposit_spike",
+        "Резкий рост депозитов: посмотреть признаки риска, ничего не предлагать.",
+    ),
+    (
+        "player.deposit_drop",
+        "Депозиты упали: спросить, всё ли в порядке с сервисом, без давления.",
+    ),
+)
+
 FALLBACK_ACTION = (
     "Автоматический разбор недоступен: прочитать переписку вручную и определить следующий шаг."
 )
@@ -205,6 +220,10 @@ def decide(
                 )
             )
         next_action = analysis.next_action
+
+    if next_action is None and player is not None and route == Route.MANAGER:
+        codes = {r.code for r in player.reasons}
+        next_action = next((step for code, step in PROFILE_ACTIONS if code in codes), None)
 
     # 3b. Alerts: the manager must act personally; not a block, not a mistake. When a specialist
     # or security already owns the case, their procedure comes first.

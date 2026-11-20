@@ -191,3 +191,12 @@ describe("team lead page: manager mistakes", () => {
     expect(within(row).getAllByRole("cell").map((c) => c.textContent)).toContain("1");
   });
 });
+
+describe("team lead page: review group wording", () => {
+  it("names every cause of a manual review", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [rg] });
+    renderLead();
+    const group = await screen.findByRole("region", { name: /Нужна ручная проверка/ });
+    expect(group).toHaveTextContent(/правило безопасности/);
+  });
+});
