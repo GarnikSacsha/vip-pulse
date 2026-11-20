@@ -96,6 +96,9 @@ export const MANAGER_ERROR_LABEL: Record<ManagerErrorCode, string> = {
   retention_pressure: "Давление: играть дальше или не выводить",
 };
 
+/** What a manager sees for a case escalated to a specialist (the lead sees the analysis). */
+export const HANDED_OVER_STEP = "Передано специалисту: не писать игроку о бонусах и акциях; подтвердить получение.";
+
 /** Manager mistakes counted by code from message times (decision 0019). */
 export const RULE_ERROR_LABEL: Record<string, string> = {
   late_reply: "Ответ позже SLA канала",

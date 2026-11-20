@@ -5,7 +5,7 @@ import type { Meta, Priority, QueueFilters, QueueItem, TaskStatus } from "../api
 import { PriorityBadge, Tag } from "../components/Badges";
 import { Pulse } from "../components/Pulse";
 import { formatWait } from "../lib/format";
-import { CATEGORY_LABEL, CHANNEL_LABEL, ROUTE_LABEL, STATUS_LABEL, alertText, qualityFlagLabel } from "../lib/labels";
+import { CATEGORY_LABEL, CHANNEL_LABEL, HANDED_OVER_STEP, ROUTE_LABEL, STATUS_LABEL, alertText, qualityFlagLabel } from "../lib/labels";
 import { managerOf, useRole } from "../lib/role";
 import { useApi } from "../lib/useApi";
 
@@ -307,6 +307,7 @@ const ROW_ACCENT: Record<Priority, string> = {
 };
 
 function QueueRow({ item, search }: { item: QueueItem; search: string }) {
+  const roleManager = managerOf(useRole().role);
   const name = item.player.display_name ?? item.player.player_id;
   return (
     <NavLink
@@ -354,7 +355,7 @@ function QueueRow({ item, search }: { item: QueueItem; search: string }) {
           {item.simulated && <Tag>демо</Tag>}
         </div>
         <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted">
-          {item.next_action ?? "Действий не требуется"}
+          {roleManager && item.route !== "manager" ? HANDED_OVER_STEP : (item.next_action ?? "Действий не требуется")}
         </p>
       </div>
 

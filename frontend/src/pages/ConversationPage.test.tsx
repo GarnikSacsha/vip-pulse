@@ -401,3 +401,21 @@ describe("conversation pane: one source for waiting", () => {
     expect(facts).not.toHaveTextContent("нарушен");
   });
 });
+
+describe("conversation pane: escalated case in the manager role", () => {
+  it("gives the manager a neutral step and leaves the full analysis to the lead", async () => {
+    localStorage.setItem("vip-pulse-role", "manager:mgr-01");
+    const base = detail();
+    serve({
+      ...base,
+      task: base.task && { ...base.task, route: "rg_specialist", next_action: "Менеджер нарушил правила, передать специалисту." },
+      analysis: base.analysis && { ...base.analysis, summary: "Менеджер грубо нарушил правила ответственной игры." },
+    });
+    renderPage();
+    const step = await screen.findByRole("region", { name: "Следующий шаг" });
+    expect(step).toHaveTextContent("Передано специалисту: не писать игроку о бонусах и акциях; подтвердить получение");
+    expect(document.body).not.toHaveTextContent("грубо нарушил");
+    expect(screen.getByText(/Полный разбор видит тимлид/)).toBeInTheDocument();
+    localStorage.clear();
+  });
+});

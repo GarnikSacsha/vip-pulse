@@ -8,6 +8,7 @@ import { formatShort, formatWait } from "../lib/format";
 import {
   CATEGORY_LABEL,
   CHANNEL_LABEL,
+  HANDED_OVER_STEP,
   MANAGER_ERROR_LABEL,
   PRIORITY_NAME,
   ROUTE_LABEL,
@@ -17,7 +18,7 @@ import {
   alertText,
   qualityFlagLabel,
 } from "../lib/labels";
-import { isReadOnly, useRole } from "../lib/role";
+import { isReadOnly, managerOf, useRole } from "../lib/role";
 import { useApi } from "../lib/useApi";
 import type { InboxContext, PaneTab } from "./QueuePage";
 
@@ -142,6 +143,8 @@ function Conversation({
   onChanged: () => void;
 }) {
   const { task, analysis, player } = data;
+  // In the manager role an escalated case shows a neutral step; the lead sees the full analysis.
+  const handedOver = managerOf(useRole().role) !== null && task !== null && task.route !== "manager";
   const name = player.display_name ?? player.player_id;
   // A link can name a message (?msg=…), e.g. a manager mistake from the team lead page.
   const [hot, setHot] = useState<string | null>(() => new URLSearchParams(search).get("msg"));
@@ -268,9 +271,15 @@ function Conversation({
                   <p className="mt-0.5">{alertText(alert).action}</p>
                 </div>
               ))}
-              {task && <NextStep task={task} onChanged={onChanged} />}
+              {task && <NextStep task={task} onChanged={onChanged} handedOver={handedOver} />}
               {task && <Reasons task={task} />}
-              <AnalysisCard analysis={analysis} messages={data.messages} highlight={highlight} />
+              {handedOver ? (
+                <Card title="Разбор">
+                  <p className="text-sm text-muted">Случай передан специалисту. Полный разбор видит тимлид.</p>
+                </Card>
+              ) : (
+                <AnalysisCard analysis={analysis} messages={data.messages} highlight={highlight} />
+              )}
               <Facts facts={data.facts} messages={data.messages} highlight={highlight} />
               {task && <History taskId={task.task_id} version={`${task.status}:${task.updated_at}`} />}
             </>
@@ -405,7 +414,15 @@ function Card({
   );
 }
 
-function NextStep({ task, onChanged }: { task: TaskOut; onChanged: () => void }) {
+function NextStep({
+  task,
+  onChanged,
+  handedOver = false,
+}: {
+  task: TaskOut;
+  onChanged: () => void;
+  handedOver?: boolean;
+}) {
   const readOnly = isReadOnly(useRole().role);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -427,7 +444,9 @@ function NextStep({ task, onChanged }: { task: TaskOut; onChanged: () => void })
 
   return (
     <Card title="Следующий шаг">
-      <p className="text-sm leading-relaxed">{task.next_action ?? "Действий не требуется."}</p>
+      <p className="text-sm leading-relaxed">
+        {handedOver ? HANDED_OVER_STEP : (task.next_action ?? "Действий не требуется.")}
+      </p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {task.route !== "manager" && <Tag tone="danger">{ROUTE_LABEL[task.route]}</Tag>}
         {task.quality_flags.map((f) => (
