@@ -184,13 +184,15 @@ CI runs all of them (Python 3.12 and 3.14, Node 24) and blocks commits that cont
 prompt v4 on 2026-11-20 for $0.062, 40/40 valid answers (all runs on this database: $0.115 of
 the $0.96 cap).
 
-- **Queue:** 10 × P0, 7 × P1, 7 × P2, 16 × P3; 6 conversations routed to the responsible-gaming
+- **Queue:** 10 × P0, 7 × P1, 6 × P2, 17 × P3; 6 conversations routed to the responsible-gaming
   specialist, 1 to security. 10 conversations are in «Горит»; «Просрочен ответ», the per-channel
   and the per-manager overdue numbers all equal 10 ([decision 0017](docs/decisions/0017-one-source-for-waiting.md)).
-- **Manager mistakes: 35.** By rule: 3 bonuses to a vulnerable or restricted player (a bonus for
-  a player writing about heavy losses, cashback for a player asking to be blocked, a deposit
-  bonus and a hint at a higher limit for a player who set a limit), 2 replies later than the
-  channel SLA, 10 players waiting past the SLA now. By the model, each citing the manager's
+- **Manager mistakes: 36 in 18 conversations** (managers are compared by conversations,
+  [0020](docs/decisions/0020-mistakes-by-conversation.md)). By rule: 3 bonuses to a vulnerable or
+  restricted player (a bonus for a player writing about heavy losses, cashback for a player asking
+  to be blocked, a deposit bonus and a hint at a higher limit for a player who set a limit),
+  1 bonus credited before the security check ([0021](docs/decisions/0021-bonus-before-security-check.md)),
+  2 replies later than the channel SLA, 10 players waiting past the SLA now. By the model, each citing the manager's
   message: 7 questions left unanswered, 5 pressure to keep playing, 4 brush-off replies, 2 rude
   tone, 1 broken promise, 1 wrong name. A manager who refused bonuses and set a limit is not
   flagged.
@@ -271,6 +273,20 @@ docs/
 | Task files: `task_v1` adapter, analysed by Gemini | |
 | Player signals: account restrictions, payment problems, deposit trends | |
 | «Связаться лично» alerts, «Кого вернуть» list | |
+
+## Known limitations
+
+- **Keywords are a safety net, not understanding.** Offers, crediting verbs, responsible-gaming
+  and fraud phrases live in `thresholds.yaml`; new wording needs new entries. «не начислю бонус»
+  still counts as an offer through the word «бонус» (the offer rules treat «не» before an offer
+  word as not a refusal: «не забудьте бонус»).
+- **A player's product feedback can be lost in the next step.** When the analysis notes feedback
+  (slow app, no search) but the next step is about something else, nothing reminds the manager to
+  thank the player and pass the feedback on. Fixing it needs a model field, not a rule.
+- **Thresholds are assumptions**: SLA hours, money escalation, deposit drop and spike (ratio and
+  a $1 000 minimum rise), win-back days, birthday window.
+- **Roles are a demo filter**, not sign-in and permissions.
+- **Times without a time zone are taken as UTC**; account status is a snapshot of the export.
 
 ## Data and secrets
 

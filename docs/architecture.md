@@ -75,7 +75,9 @@ Full records with evidence and rejected alternatives are in [`docs/decisions/`](
 [0016 birthdays and open requests](decisions/0016-birthdays-and-open-requests.md),
 [0017 one source for waiting](decisions/0017-one-source-for-waiting.md),
 [0018 head of VIP read-only queue](decisions/0018-head-read-only-queue.md),
-[0019 mistakes counted by code](decisions/0019-rule-counted-mistakes.md).
+[0019 mistakes counted by code](decisions/0019-rule-counted-mistakes.md),
+[0020 mistakes by conversation](decisions/0020-mistakes-by-conversation.md),
+[0021 bonus before the security check](decisions/0021-bonus-before-security-check.md).
 
 - **Adapter per format.** The real `dialogs.json` / `players.csv` were not available when the
   foundation was built. The internal model is ours; only a new adapter is needed for the real files.
