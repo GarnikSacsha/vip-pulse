@@ -86,7 +86,7 @@ class QueueItem(BaseModel):
     # Active work (open / in progress) whose player waits longer than the channel's SLA.
     overdue: bool
     sla_hours: float  # the channel's response SLA under the current thresholds
-    sla_lane: SlaLane  # computed by app.policy.sla; "breached" exactly when overdue
+    sla_lane: SlaLane  # computed by app.policy.sla; escalated work is "specialist" (0013)
     # Alerts for the manager to act personally, e.g. "multi_account" (from reasons "alert.*").
     alerts: list[str]
     requires_review: bool

@@ -6,7 +6,7 @@ export type Route = "manager" | "rg_specialist" | "security";
 export type Channel = "telegram" | "whatsapp" | "email" | "other";
 export type SenderRole = "player" | "manager" | "system";
 /** Mirrors backend/app/policy/sla.py: decided by thresholds, never by the model. */
-export type SlaLane = "breached" | "at_risk" | "waiting" | "ok";
+export type SlaLane = "breached" | "at_risk" | "waiting" | "specialist" | "ok";
 export type Sentiment = "positive" | "neutral" | "negative" | "mixed";
 export type Category =
   | "withdrawal"

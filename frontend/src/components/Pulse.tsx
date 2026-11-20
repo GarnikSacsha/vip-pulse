@@ -9,6 +9,7 @@ const STROKE: Record<SlaLane, string> = {
   breached: "stroke-danger",
   at_risk: "stroke-p1",
   waiting: "stroke-p2",
+  specialist: "stroke-p2",
   ok: "stroke-line",
 };
 
@@ -17,6 +18,7 @@ function label(lane: SlaLane, waitHours: number | null, slaHours: number): strin
   const base = `Ждёт ${formatWait(waitHours)} из ${formatWait(slaHours)} по SLA`;
   if (lane === "breached") return `${base}, SLA нарушен`;
   if (lane === "at_risk") return `${base}, скоро нарушение`;
+  if (lane === "specialist") return `У специалиста, игрок ждёт ${formatWait(waitHours)}`;
   return base;
 }
 

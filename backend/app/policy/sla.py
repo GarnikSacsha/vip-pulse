@@ -8,6 +8,9 @@ class SlaLane(StrEnum):
     AT_RISK = "at_risk"  # «Скоро нарушится»: past the at-risk share of the SLA
     WAITING = "waiting"  # «Ждёт»: the player waits, within the SLA
     OK = "ok"  # «Всё ок»: nobody waits, or the item is not open work
+    # «У специалиста»: escalated to a responsible-gaming or security specialist. Never «Всё ок»,
+    # whatever the model said about a reply (decision 0013).
+    SPECIALIST = "specialist"
 
 
 def sla_lane(
@@ -19,6 +22,7 @@ def sla_lane(
     breached: bool,
     at_risk_share: float,
     reply_needed: bool = True,
+    escalated: bool = False,
 ) -> SlaLane:
     """Lane for one item.
 
@@ -26,6 +30,8 @@ def sla_lane(
     agrees with the priority. Without it the item is at most "at risk", even if today's thresholds
     would call it late: the next triage run settles that.
     """
+    if active and escalated:
+        return SlaLane.SPECIALIST
     # "Спасибо, всё пришло": the player spoke last, but there is nothing to answer.
     if not active or not awaiting_reply or not reply_needed or wait_hours is None:
         return SlaLane.OK

@@ -197,6 +197,7 @@ def list_queue(
                     reply_needed=not any(
                         r.get("code") == "sla.no_reply_needed" for r in task.reasons
                     ),
+                    escalated=task.route != Route.MANAGER,
                 ),
                 alerts=alerts_of(task),
                 requires_review=task.requires_review,

@@ -193,7 +193,8 @@ const LANES: { lane: SlaLane; hint: string; tone: string }[] = [
   { lane: "breached", hint: "Ждут дольше SLA канала", tone: "text-danger" },
   { lane: "at_risk", hint: "Близко к порогу SLA", tone: "text-p1" },
   { lane: "waiting", hint: "Ждут, время ещё есть", tone: "text-ink" },
-  { lane: "ok", hint: "Ход за игроком", tone: "text-muted" },
+  { lane: "specialist", hint: "Эскалированы: ответственная игра, безопасность", tone: "text-ink" },
+  { lane: "ok", hint: "Ход за игроком или ответ не нужен", tone: "text-muted" },
 ];
 
 /** Active work by SLA lane. Lanes come from the policy thresholds, never from the model. */
@@ -206,7 +207,7 @@ function SlaBoard({ items }: { items: QueueItem[] }) {
         </h2>
         <p className="text-xs text-muted">Пороги — в thresholds.yaml, не решение модели.</p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         {LANES.map(({ lane, hint, tone }) => {
           const laneItems = items.filter((i) => i.sla_lane === lane);
           const headingId = `lane-${lane}`;
@@ -241,17 +242,28 @@ function SlaBoard({ items }: { items: QueueItem[] }) {
   );
 }
 
+/** The card label follows the lane, so a lane and its label can never disagree. */
 function timeLeft(item: QueueItem): string {
-  if (!item.awaiting_reply || item.wait_hours === null) return "не ждёт ответа";
-  const left = item.sla_hours - item.wait_hours;
-  if (item.sla_lane === "breached") return `просрочено на ${formatWait(Math.max(-left, 0))}`;
-  return left > 0 ? `осталось ${formatWait(left)}` : "SLA на исходе";
+  const wait = item.awaiting_reply ? item.wait_hours : null;
+  switch (item.sla_lane) {
+    case "ok":
+      return "не ждёт ответа";
+    case "specialist":
+      return wait === null ? "ход за игроком" : `игрок ждёт ${formatWait(wait)}`;
+    case "breached":
+      return `просрочено на ${formatWait(Math.max((wait ?? 0) - item.sla_hours, 0))}`;
+    default: {
+      const left = item.sla_hours - (wait ?? 0);
+      return left > 0 ? `осталось ${formatWait(left)}` : "SLA на исходе";
+    }
+  }
 }
 
 const BAR: Record<SlaLane, string> = {
   breached: "bg-danger",
   at_risk: "bg-p1",
   waiting: "bg-p2",
+  specialist: "bg-p2",
   ok: "bg-line",
 };
 
@@ -273,7 +285,7 @@ function LaneCard({ item }: { item: QueueItem }) {
         </div>
         <span className="text-xs font-semibold tabular-nums text-muted">{item.priority}</span>
       </div>
-      {item.awaiting_reply && (
+      {item.awaiting_reply && item.sla_lane !== "ok" && (
         <div aria-hidden="true" className="mt-2.5 h-1 overflow-hidden rounded-full bg-chip">
           <div className={`h-full rounded-full ${BAR[item.sla_lane]}`} style={{ width: `${share * 100}%` }} />
         </div>

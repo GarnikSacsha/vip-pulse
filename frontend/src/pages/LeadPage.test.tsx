@@ -16,7 +16,7 @@ const rg = queueItem({
   wait_hours: null,
   awaiting_reply: false,
   overdue: false,
-  sla_lane: "ok",
+  sla_lane: "specialist",
 });
 const soon = queueItem({
   task_id: 5,
@@ -103,7 +103,7 @@ describe("team lead page: SLA lanes", () => {
     expect(atRisk).toHaveTextContent("осталось 30 мин");
 
     expect(lane(/^Ждёт/)).toHaveAccessibleName("Ждёт · 0");
-    expect(within(lane(/^Всё ок/)).getByText(/Demo Player 004/)).toBeInTheDocument();
+    expect(within(lane(/^У специалиста/)).getByText(/Demo Player 004/)).toBeInTheDocument();
   });
 });
 
@@ -118,3 +118,40 @@ describe("team lead page: personal contact", () => {
   });
 });
 
+
+describe("team lead page: lanes and labels agree", () => {
+  it("puts escalated work in «У специалиста» and never labels «Всё ок» as running out", async () => {
+    const specialist = queueItem({
+      task_id: 11,
+      conversation_id: "d-011",
+      player: { player_id: "p-011", display_name: "Demo Player 011", manager_id: "mgr-02", segment: "gold" },
+      route: "rg_specialist",
+      category: "responsible_gaming",
+      wait_hours: 173,
+      overdue: false,
+      sla_lane: "specialist",
+    });
+    const thanks = queueItem({
+      task_id: 12,
+      conversation_id: "d-012",
+      player: { player_id: "p-012", display_name: "Demo Player 012", manager_id: "mgr-01", segment: "gold" },
+      priority: "P3",
+      wait_hours: 143,
+      overdue: false,
+      sla_lane: "ok",
+    });
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [specialist, thanks] });
+    renderLead();
+    const board = await screen.findByRole("region", { name: "SLA по активным диалогам" });
+    const lane = (name: RegExp) => within(board).getByRole("region", { name });
+
+    const withSpecialist = lane(/^У специалиста/);
+    expect(within(withSpecialist).getByText(/Demo Player 011/)).toBeInTheDocument();
+    expect(withSpecialist).toHaveTextContent("игрок ждёт 7 д 5 ч");
+
+    const ok = lane(/^Всё ок/);
+    expect(within(ok).getByText(/Demo Player 012/)).toBeInTheDocument();
+    expect(ok).toHaveTextContent("не ждёт ответа");
+    expect(board).not.toHaveTextContent("SLA на исходе");
+  });
+});

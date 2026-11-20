@@ -42,6 +42,7 @@ export const SLA_LANE_LABEL: Record<SlaLane, string> = {
   breached: "Горит",
   at_risk: "Скоро нарушится",
   waiting: "Ждёт",
+  specialist: "У специалиста",
   ok: "Всё ок",
 };
 
