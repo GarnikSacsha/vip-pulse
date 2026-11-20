@@ -1,5 +1,6 @@
 """Who to win back, and whose birthday is a reason to write. Decided in code, not by the model."""
 
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
@@ -11,7 +12,7 @@ from app.api.queue import ACTIVE, SessionDep, _as_of, _player
 from app.api.schemas import BirthdayOut, OpenRequestOut, ReasonOut, WinbackOut
 from app.models import AnalysisRow, ConversationRow, PlayerRow, TaskRow
 from app.policy.config import PolicyConfig
-from app.policy.winback import OpenRequest, birthdays, winback
+from app.policy.winback import OpenRequest, Tier, WinbackItem, birthdays, winback
 from app.schemas.analysis import Priority
 from app.schemas.domain import Player
 
@@ -72,17 +73,10 @@ def _open_requests(session: Session) -> dict[str, OpenRequest]:
     return {pid: request for pid, (_, request) in found.items()}
 
 
-@router.get("/winback", response_model=list[WinbackOut])
-def list_winback(
-    session: SessionDep,
-    policy: Annotated[PolicyConfig, Depends(get_policy)],
-    manager: ManagerQuery = None,
-) -> list[WinbackOut]:
-    as_of = _as_of(session)
-    if as_of is None:
-        return []
-    rows = _players(session, manager)
-
+def _winback(
+    session: Session, policy: PolicyConfig, rows: dict[str, PlayerRow], as_of: datetime
+) -> tuple[list[WinbackItem], dict[str, str]]:
+    """Win-back items and each player's latest conversation id."""
     last: dict = {}
     latest_id: dict[str, str] = {}
     contacts = session.execute(
@@ -107,14 +101,30 @@ def list_winback(
         if route == "rg_specialist" or any(r.get("code") in risky for r in reasons or []):
             excluded.add(player_id)
 
+    players = _domain(rows)
     items = winback(
-        _domain(rows),
+        players,
         last,
         as_of,
         policy,
         excluded=excluded,
         open_requests=_open_requests(session),
+        birthday_ids={b.player.player_id for b in birthdays(players, as_of, policy)},
     )
+    return items, latest_id
+
+
+@router.get("/winback", response_model=list[WinbackOut])
+def list_winback(
+    session: SessionDep,
+    policy: Annotated[PolicyConfig, Depends(get_policy)],
+    manager: ManagerQuery = None,
+) -> list[WinbackOut]:
+    as_of = _as_of(session)
+    if as_of is None:
+        return []
+    rows = _players(session, manager)
+    items, latest_id = _winback(session, policy, rows, as_of)
     return [
         WinbackOut(
             player=_player(rows[item.player.player_id]),
@@ -146,6 +156,9 @@ def list_birthdays(
     if as_of is None:
         return []
     rows = _players(session, manager)
+    # An introduction with a birthday already says «поздравить» on its win-back card.
+    items, _ = _winback(session, policy, rows, as_of)
+    introduced = {i.player.player_id for i in items if i.tier == Tier.INTRODUCE}
     return [
         BirthdayOut(
             player=_player(rows[b.player.player_id]),
@@ -154,4 +167,5 @@ def list_birthdays(
             next_action=b.next_action,
         )
         for b in birthdays(_domain(rows), as_of, policy)
+        if b.player.player_id not in introduced
     ]

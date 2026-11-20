@@ -64,6 +64,8 @@ class BirthdayItem(BaseModel):
 
 
 BIRTHDAY_ACTION = "Поздравить лично, без бонуса и промо."
+# An introduction whose birthday is in the window: one hint instead of two blocks.
+BIRTHDAY_INTRO_ACTION = "Повод познакомиться — поздравить, без бонуса и промо."
 
 
 def _birthday_in(year: int, born: date) -> date:
@@ -128,6 +130,7 @@ def winback(
     cfg: PolicyConfig,
     excluded: set[str] | frozenset[str] = frozenset(),
     open_requests: dict[str, OpenRequest] | None = None,
+    birthday_ids: set[str] | frozenset[str] = frozenset(),
 ) -> list[WinbackItem]:
     """`excluded`: players with a risk signal in their conversations (e.g. responsible gaming)."""
     rules = cfg.winback
@@ -193,7 +196,13 @@ def winback(
                 player=player,
                 tier=tier,
                 reasons=tuple(reasons),
-                next_action=OPEN_REQUEST_ACTION if request else _action(tier, game),
+                next_action=(
+                    OPEN_REQUEST_ACTION
+                    if request
+                    else BIRTHDAY_INTRO_ACTION
+                    if tier == Tier.INTRODUCE and player.player_id in birthday_ids
+                    else _action(tier, game)
+                ),
                 open_request=request,
                 last_login_days=login_days,
                 last_contact_days=contact_days,

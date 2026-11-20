@@ -104,10 +104,12 @@ def test_open_request_comes_before_win_back() -> None:
 FIXTURE = Path(__file__).parent / "fixtures" / "task_v1"
 
 
-def _client(tmp_path: Path) -> TestClient:
+def _client(tmp_path: Path, extra: str | None = None) -> TestClient:
     # T1 went silent (last login long ago), has a birthday in two days and an open request.
     players = (FIXTURE / "players.csv").read_text(encoding="utf-8")
     players = players.replace("2026-01-10,1990-01-01", "2025-12-01,1990-01-12")
+    if extra:
+        players = players.rstrip("\n") + "\n" + extra + "\n"
     (tmp_path / "players.csv").write_text(players, encoding="utf-8")
     engine = make_engine("sqlite://")
     init_db(engine)
@@ -134,3 +136,24 @@ def test_api_win_back_card_points_to_the_open_request(tmp_path: Path) -> None:
     assert item["open_request"]["conversation_id"] == "X1"
     assert item["open_request"]["category"] == "withdrawal"
     assert item["next_action"].startswith("Сначала закрыть открытый запрос")
+
+
+def test_introduction_with_a_birthday_gets_one_hint() -> None:
+    as_of = datetime(2026, 1, 31, 12, tzinfo=UTC)
+    p = _player("n", "1990-02-02", last_login_at="2026-01-30")  # active, never contacted
+    [item] = winback([p], {}, as_of, CFG, birthday_ids={"n"})
+    assert item.next_action == "Повод познакомиться — поздравить, без бонуса и промо."
+
+
+def test_api_does_not_list_the_same_player_twice(tmp_path: Path) -> None:
+    with _client(
+        tmp_path,
+        extra="T3,ACME,CIS,ru,VIP,Ольга,2025-01-01,active,500,2,500,2,"
+        "2026-01-09,0,0,,0,0,0,2026-01-09,1991-01-11,Demo Slot",
+    ) as client:
+        winback_items = {i["player"]["player_id"]: i for i in client.get("/api/winback").json()}
+        birthday_ids = [b["player"]["player_id"] for b in client.get("/api/birthdays").json()]
+    assert winback_items["T3"]["tier"] == "introduce"
+    assert winback_items["T3"]["next_action"].startswith("Повод познакомиться")
+    assert "T3" not in birthday_ids
+    assert "T1" in birthday_ids  # urgent win-back, not an introduction: keeps its birthday line
