@@ -70,7 +70,7 @@ describe("queue page", () => {
     expect(queueCalls(calls).at(-1)).toBe("/api/queue?priority=P0");
 
     await user.click(screen.getByRole("tab", { name: /Решённые/ }));
-    expect(queueCalls(calls).at(-1)).toBe("/api/queue?status=resolved&priority=P0");
+    expect(queueCalls(calls)).toContain("/api/queue?status=resolved&priority=P0");
   });
 
   it("opens with filters from a shared link", async () => {
@@ -362,5 +362,20 @@ describe("queue page: small fixes", () => {
     await screen.findByText("3");
     expect(tabs.map((t) => t.textContent)).toEqual(["Активные 1", "Все 3", "Решённые 1", "Без действий 1"]);
     localStorage.clear();
+  });
+});
+
+describe("queue page: tab counts follow the priority filter", () => {
+  it("counts only P0 items when the P0 filter is on", async () => {
+    const p0 = [
+      queueItem(),
+      queueItem({ task_id: 81, conversation_id: "d-081", status: "resolved" }),
+    ];
+    const calls = serveApi(vi, { "/api/meta": meta, "/api/queue": (url: string) => (url.includes("status=") ? [p0[0]] : p0) });
+    renderQueue("/queue?priority=P0");
+    await screen.findByText("2");
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs).toEqual(["Активные 1", "Все 2", "Решённые 1", "Без действий 0"]);
+    expect(calls).toContain("/api/queue?priority=P0");
   });
 });

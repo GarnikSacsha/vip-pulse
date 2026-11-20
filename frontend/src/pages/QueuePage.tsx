@@ -85,9 +85,15 @@ export function QueuePage() {
   };
   const queue = useApi(() => api.queue(filters), JSON.stringify(filters));
   // All of one manager's items, for the tab counts (the department counts come from meta).
+  // With a manager or priority filter the tab counts come from the filtered items, all statuses;
+  // otherwise from the department-wide counts in meta.
+  const scoped = Boolean(manager || priority);
   const mine = useApi(
-    () => (manager ? api.queue({ manager: [manager] }) : Promise.resolve(null)),
-    `mine:${manager ?? ""}:${queue.data?.length ?? ""}`,
+    () =>
+      scoped
+        ? api.queue({ ...(priority ? { priority: [priority] } : {}), ...(manager ? { manager: [manager] } : {}) })
+        : Promise.resolve(null),
+    `scoped:${manager ?? ""}:${priority ?? ""}:${queue.data?.length ?? ""}`,
   );
 
   // j / k: next and previous conversation, wherever the focus is, except inside text fields.
@@ -192,8 +198,8 @@ export function QueuePage() {
             {VIEWS.map((v) => {
               const isSelected = v.id === view.id;
               // Meta counts the whole department: wrong on one manager's queue, so hidden there.
-              // Meta counts the department; a manager's queue is counted over their own players.
-              const count = manager ? managerCount(v, mine.data) : viewCount(v, meta);
+              // Meta counts the department; a filtered queue is counted over its own items.
+              const count = scoped ? managerCount(v, mine.data) : viewCount(v, meta);
               return (
                 <button
                   key={v.id}
