@@ -264,6 +264,7 @@ def test_overview_workload_by_manager(client: TestClient) -> None:
             "overdue": 1,
             "oldest_wait_hours": 27.0,
             "errors": 3,  # + d-001 waiting past the SLA (rule, 0019)
+            "error_conversations": 2,  # d-001 (two mistakes), d-005
         },
         {
             "manager_id": "mgr-02",
@@ -274,6 +275,7 @@ def test_overview_workload_by_manager(client: TestClient) -> None:
             "overdue": 0,
             "oldest_wait_hours": None,  # d-009 waits for security (0017)
             "errors": 1,
+            "error_conversations": 1,
         },
     ]
 

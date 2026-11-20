@@ -227,7 +227,8 @@ class OverviewTotals(BaseModel):
     overdue: int  # active and waiting longer than the channel SLA
     awaiting_reply: int  # active and the player spoke last
     escalated: int  # active and routed away from the manager (RG specialist, security)
-    quality_issues: int  # active with a manager-quality flag (e.g. offer to a vulnerable player)
+    # Conversations with at least one manager mistake (code or analysis), all statuses included.
+    quality_issues: int
     needs_review: int  # active and the analysis must be checked by a person
     resolved: int
     no_action: int
@@ -242,6 +243,7 @@ class ManagerLoad(BaseModel):
     overdue: int
     oldest_wait_hours: float | None  # longest wait among active items awaiting a reply
     errors: int  # manager mistakes in all their conversations: code flags + analysis findings
+    error_conversations: int  # conversations with at least one mistake: the fair comparison
 
 
 class CategoryCount(BaseModel):

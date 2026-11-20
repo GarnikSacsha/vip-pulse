@@ -236,6 +236,7 @@ export interface ManagerLoad {
   overdue: number;
   oldest_wait_hours: number | null;
   errors: number; // code flags + analysis findings, all conversations
+  error_conversations: number; // conversations with at least one mistake
 }
 
 export interface CategoryCount {

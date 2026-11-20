@@ -51,7 +51,12 @@ function OverviewBody({ data }: { data: Overview }) {
             tone: t.overdue ? "alert" : "plain",
           },
           { label: "Сигналы безопасности", value: t.escalated, hint: "ответственная игра и взломы" },
-          { label: "Ошибки менеджеров", value: t.quality_issues, tone: t.quality_issues ? "alert" : "plain" },
+          {
+            label: "Диалоги с ошибками",
+            value: t.quality_issues,
+            hint: `из ${t.total} диалогов, включая закрытые`,
+            tone: t.quality_issues ? "alert" : "plain",
+          },
         ]}
       />
 

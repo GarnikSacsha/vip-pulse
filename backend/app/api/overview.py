@@ -35,6 +35,10 @@ def _active(item: QueueItem) -> bool:
     return item.status in ACTIVE
 
 
+def _has_mistake(item: QueueItem) -> bool:
+    return bool(item.quality_flags or item.manager_errors or item.rule_errors)
+
+
 def _totals(items: list[QueueItem]) -> OverviewTotals:
     active = [i for i in items if _active(i)]
     return OverviewTotals(
@@ -47,9 +51,7 @@ def _totals(items: list[QueueItem]) -> OverviewTotals:
         awaiting_reply=sum(i.reply_state == ReplyState.MANAGER for i in active),
         escalated=sum(i.route != Route.MANAGER for i in active),
         # Mistakes are about how a contact went, so closed conversations count too.
-        quality_issues=sum(
-            bool(i.quality_flags or i.manager_errors or i.rule_errors) for i in items
-        ),
+        quality_issues=sum(_has_mistake(i) for i in items),
         needs_review=sum(i.requires_review for i in active),
         resolved=sum(i.status == TaskStatus.RESOLVED for i in items),
         no_action=sum(i.status == TaskStatus.NO_ACTION for i in items),
@@ -80,6 +82,7 @@ def _managers(items: list[QueueItem]) -> list[ManagerLoad]:
                 errors=sum(
                     len(i.quality_flags) + len(i.manager_errors) + len(i.rule_errors) for i in group
                 ),
+                error_conversations=sum(_has_mistake(i) for i in group),
             )
         )
     # Players without a manager last: they are the gap the lead must close.

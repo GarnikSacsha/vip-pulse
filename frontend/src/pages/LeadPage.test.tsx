@@ -44,7 +44,7 @@ describe("team lead page", () => {
     const tiles = within(screen.getByRole("list", { name: "Ключевые показатели" }));
     expect(tiles.getByText("Просрочен ответ").closest("li")).toHaveTextContent("1");
     expect(tiles.getByText("Эскалации").closest("li")).toHaveTextContent("2");
-    expect(tiles.getByText("Ошибки менеджеров").closest("li")).toHaveTextContent("1");
+    expect(tiles.getByText("Диалоги с ошибками").closest("li")).toHaveTextContent("1");
   });
 
   it("lists workload per manager with a link to their queue", async () => {
@@ -186,9 +186,9 @@ describe("team lead page: manager mistakes", () => {
     serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [late] });
     renderLead();
     const table = await screen.findByRole("table", { name: "Нагрузка по менеджерам" });
-    expect(within(table).getByRole("columnheader", { name: "Ошибки" })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Диалоги с ошибками" })).toBeInTheDocument();
     const row = within(table).getByRole("row", { name: /mgr-02/ });
-    expect(within(row).getAllByRole("cell").map((c) => c.textContent)).toContain("1");
+    expect(row).toHaveTextContent("1 (ошибок: 1)");
   });
 });
 
@@ -225,10 +225,55 @@ describe("team lead page: mistakes counted by code", () => {
     const mine = within(await screen.findByRole("region", { name: /Ошибки менеджеров/ })).getByRole("list", { name: "mgr-01" });
     const late = within(mine).getByRole("link", { name: /Ответ позже SLA канала: 5 ч/ });
     expect(late).toHaveAttribute("href", "/queue/d-001?msg=m-001-1");
-    expect(late).toHaveTextContent("посчитано кодом");
+    expect(late).toHaveTextContent("(код)");
     expect(within(mine).getByRole("link", { name: /Игрок ждёт дольше SLA: 1 д 3 ч/ })).toHaveAttribute(
       "href",
       "/queue/d-001?msg=m-001-3",
     );
+  });
+});
+
+describe("team lead page: conversations with mistakes vs mistakes", () => {
+  const twoMistakes = queueItem({
+    task_id: 61,
+    conversation_id: "d-001",
+    manager_errors: [{ code: "canned_reply", evidence_message_ids: ["m-001-2"] }],
+    rule_errors: [{ code: "waiting_past_sla", evidence_message_ids: ["m-001-3"], hours: 27 }],
+  });
+  const oneMistake = queueItem({
+    task_id: 62,
+    conversation_id: "d-004",
+    player: { player_id: "p-004", display_name: "Demo Player 004", manager_id: "mgr-02", segment: "platinum" },
+    quality_flags: ["offer_to_vulnerable_player"],
+  });
+
+  it("names the tile «Диалоги с ошибками» out of all conversations", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [twoMistakes, oneMistake] });
+    renderLead();
+    const tiles = within(await screen.findByRole("list", { name: "Ключевые показатели" }));
+    const tile = tiles.getByText("Диалоги с ошибками").closest("li");
+    expect(tile).toHaveTextContent(`из ${overview.totals.total} диалогов, включая закрытые`);
+    expect(tiles.queryByText("Ошибки менеджеров")).not.toBeInTheDocument();
+  });
+
+  it("groups mistakes by manager, then by conversation, each linked to its message", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [twoMistakes, oneMistake] });
+    renderLead();
+    const panel = await screen.findByRole("region", { name: /Ошибки менеджеров/ });
+    expect(panel).toHaveAccessibleName("Ошибки менеджеров · 3 в 2 диалогах");
+    expect(panel).toHaveTextContent("Бонус уязвимому игроку и опоздания по SLA считает код");
+    const conv = within(within(panel).getByRole("list", { name: "mgr-01" })).getByRole("listitem");
+    expect(conv).toHaveTextContent("Demo Player 001 · 2 ошибки");
+    expect(within(conv).getByRole("link", { name: /Шаблонная отписка/ })).toHaveAttribute("href", "/queue/d-001?msg=m-001-2");
+    expect(within(conv).getByRole("link", { name: /Игрок ждёт дольше SLA/ })).toHaveAttribute("href", "/queue/d-001?msg=m-001-3");
+  });
+
+  it("compares managers by conversations with mistakes, mistakes alongside", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [twoMistakes] });
+    renderLead();
+    const table = await screen.findByRole("table", { name: "Нагрузка по менеджерам" });
+    expect(within(table).getByRole("columnheader", { name: /Диалоги с ошибками/ })).toBeInTheDocument();
+    const row = within(table).getByRole("row", { name: /mgr-01/ });
+    expect(row).toHaveTextContent("1 (ошибок: 2)");
   });
 });

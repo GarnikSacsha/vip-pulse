@@ -126,25 +126,42 @@ function mistakesOf(item: QueueItem): Mistake[] {
   return [...byCode, ...byTiming, ...byAnalysis];
 }
 
-/** Manager mistakes by manager: the bonus rule (code) and what the analysis found in the text. */
+/** "1 ошибка", "3 ошибки", "5 ошибок". */
+export function mistakesWord(n: number): string {
+  const ten = n % 10;
+  const hundred = n % 100;
+  if (ten === 1 && hundred !== 11) return `${n} ошибка`;
+  if (ten >= 2 && ten <= 4 && (hundred < 12 || hundred > 14)) return `${n} ошибки`;
+  return `${n} ошибок`;
+}
+
+/**
+ * Manager mistakes by manager, then by conversation (decision 0020): one conversation can hold
+ * several mistakes, so managers are compared by conversations, with the mistakes listed inside.
+ */
 function ManagerMistakes({ items }: { items: QueueItem[] }) {
-  const groups = new Map<string, Mistake[]>();
+  const groups = new Map<string, { item: QueueItem; mistakes: Mistake[] }[]>();
+  let total = 0;
   for (const item of items) {
-    for (const m of mistakesOf(item)) {
-      const manager = item.player.manager_id ?? "Без менеджера";
-      groups.set(manager, [...(groups.get(manager) ?? []), m]);
-    }
+    const mistakes = mistakesOf(item);
+    if (mistakes.length === 0) continue;
+    total += mistakes.length;
+    const manager = item.player.manager_id ?? "Без менеджера";
+    groups.set(manager, [...(groups.get(manager) ?? []), { item, mistakes }]);
   }
-  const total = [...groups.values()].reduce((n, g) => n + g.length, 0);
+  const conversations = [...groups.values()].reduce((n, g) => n + g.length, 0);
   return (
     <Panel
       id="group-quality"
       title={
         <>
-          Ошибки менеджеров <span className="font-normal tabular-nums text-muted">· {total}</span>
+          Ошибки менеджеров{" "}
+          <span className="font-normal tabular-nums text-muted">
+            · {total} в {conversations} {conversations === 1 ? "диалоге" : "диалогах"}
+          </span>
         </>
       }
-      description="Бонус уязвимому игроку считает код. Остальное находит разбор переписки, ссылка ведёт на сообщение. Включая закрытые диалоги."
+      description="Бонус уязвимому игроку и опоздания по SLA считает код, остальное находит разбор переписки. Ссылка ведёт на сообщение. Включая закрытые диалоги."
     >
       {total === 0 ? (
         <p className="px-4 py-4 text-sm text-muted">Нет</p>
@@ -155,27 +172,39 @@ function ManagerMistakes({ items }: { items: QueueItem[] }) {
             .map(([manager, list]) => (
               <div key={manager} className="min-w-0">
                 <h3 className="text-sm font-semibold">
-                  {manager} <span className="font-normal tabular-nums text-muted">· {list.length}</span>
+                  {manager}{" "}
+                  <span className="font-normal tabular-nums text-muted">· {list.length} диал.</span>
                 </h3>
-                <ul aria-label={manager} className="mt-1 space-y-1">
-                  {list.map((m) => {
-                    const to = `/queue/${encodeURIComponent(m.item.conversation_id)}${
-                      m.messageId ? `?msg=${encodeURIComponent(m.messageId)}` : ""
-                    }`;
-                    const name = m.item.player.display_name ?? m.item.player.player_id;
+                <ul aria-label={manager} className="mt-1 space-y-2">
+                  {list.map(({ item, mistakes }) => {
+                    const name = item.player.display_name ?? item.player.player_id;
                     return (
-                      <li key={m.key} className="text-sm">
-                        <Link to={to} className="hover:underline">
-                          <span className={m.source === "code" ? "text-danger" : ""}>{m.label}</span>
-                          {m.source === "code" && <span className="text-xs text-muted"> (посчитано кодом)</span>}
-                          <span className="text-muted"> · {name}</span>
-                        </Link>
-                        {m.item.simulated && (
-                          <>
-                            {" "}
-                            <Tag>демо</Tag>
-                          </>
-                        )}
+                      <li key={item.task_id} className="text-sm">
+                        <p className="font-medium">
+                          {name} <span className="font-normal text-muted">· {mistakesWord(mistakes.length)}</span>
+                          {item.simulated && (
+                            <>
+                              {" "}
+                              <Tag>демо</Tag>
+                            </>
+                          )}
+                        </p>
+                        <p className="text-xs leading-relaxed">
+                          {mistakes.map((m, i) => (
+                            <span key={m.key}>
+                              {i > 0 && ", "}
+                              <Link
+                                to={`/queue/${encodeURIComponent(item.conversation_id)}${
+                                  m.messageId ? `?msg=${encodeURIComponent(m.messageId)}` : ""
+                                }`}
+                                className={`hover:underline ${m.source === "code" ? "text-danger" : ""}`}
+                              >
+                                {m.label}
+                                {m.source === "code" && <span className="text-muted"> (код)</span>}
+                              </Link>
+                            </span>
+                          ))}
+                        </p>
                       </li>
                     );
                   })}
@@ -201,7 +230,12 @@ function LeadKpis({ overview }: { overview: Overview }) {
           tone: t.overdue ? "alert" : "plain",
         },
         { label: "Эскалации", value: t.escalated, hint: "RG и безопасность" },
-        { label: "Ошибки менеджеров", value: t.quality_issues, tone: t.quality_issues ? "alert" : "plain" },
+        {
+          label: "Диалоги с ошибками",
+          value: t.quality_issues,
+          hint: `из ${t.total} диалогов, включая закрытые`,
+          tone: t.quality_issues ? "alert" : "plain",
+        },
         { label: "Нужна проверка", value: t.needs_review },
       ]}
     />
@@ -228,7 +262,7 @@ function Workload({ managers }: { managers: ManagerLoad[] }) {
                 <th className="px-3 py-2 text-right font-medium">Критичные</th>
                 <th className="px-3 py-2 text-right font-medium">Просрочено</th>
                 <th className="px-3 py-2 text-right font-medium">Дольше всех ждёт</th>
-                <th className="px-3 py-2 text-right font-medium">Ошибки</th>
+                <th className="px-3 py-2 text-right font-medium">Диалоги с ошибками</th>
                 <th className="px-4 py-2 text-right font-medium">Всего</th>
               </tr>
             </thead>
@@ -252,7 +286,10 @@ function Workload({ managers }: { managers: ManagerLoad[] }) {
                   <td className="px-3 py-2.5 text-right">{m.critical}</td>
                   <td className={`px-3 py-2.5 text-right ${m.overdue ? "font-medium text-danger" : ""}`}>{m.overdue}</td>
                   <td className="px-3 py-2.5 text-right">{formatWait(m.oldest_wait_hours)}</td>
-                  <td className={`px-3 py-2.5 text-right ${m.errors ? "font-medium text-danger" : ""}`}>{m.errors}</td>
+                  <td className="px-3 py-2.5 text-right">
+                    <span className={m.error_conversations ? "font-medium text-danger" : ""}>{m.error_conversations}</span>
+                    <span className="text-xs text-muted"> (ошибок: {m.errors})</span>
+                  </td>
                   <td className="px-4 py-2.5 text-right text-muted">{m.total}</td>
                 </tr>
               ))}

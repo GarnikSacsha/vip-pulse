@@ -97,3 +97,31 @@ def test_rule_mistakes_count_in_the_oversight_numbers(client: TestClient) -> Non
     ]
     assert sum(m["errors"] for m in body["managers"]) == sum(per_item)
     assert body["totals"]["quality_issues"] == sum(1 for n in per_item if n)
+
+
+# --- conversations with mistakes vs mistakes (decision 0020) ---------------------------------
+
+
+def test_conversations_with_mistakes_agree_everywhere(client: TestClient) -> None:
+    body = client.get("/api/overview").json()
+    items = client.get("/api/queue").json()
+    with_mistakes = [
+        i for i in items if i["quality_flags"] or i["manager_errors"] or i["rule_errors"]
+    ]
+    assert body["totals"]["quality_issues"] == len(with_mistakes)
+    assert sum(m["error_conversations"] for m in body["managers"]) == len(with_mistakes)
+    for m in body["managers"]:
+        assert m["error_conversations"] <= m["errors"]
+
+
+def test_late_reply_and_current_wait_never_cite_the_same_player_message() -> None:
+    # A late reply answers a player message; a current wait is about messages nobody answered.
+    conv = _conv(
+        Channel.TELEGRAM,
+        (SenderRole.PLAYER, 0),
+        (SenderRole.MANAGER, 6),  # late on m1
+        (SenderRole.PLAYER, 7),  # still waiting
+    )
+    [late] = late_replies(conv, CFG.sla)
+    assert late.player_message_id == "m1"
+    assert late.player_message_id != "m3"
