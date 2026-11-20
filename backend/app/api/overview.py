@@ -24,6 +24,7 @@ from app.api.schemas import (
 from app.models import AnalysisRow, ConversationRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.policy.priority import Route
+from app.policy.sla import ReplyState
 from app.schemas.analysis import Priority, ProcessingStatus
 from app.tasks.service import TaskStatus
 
@@ -42,7 +43,8 @@ def _totals(items: list[QueueItem]) -> OverviewTotals:
         in_progress=sum(i.status == TaskStatus.IN_PROGRESS for i in items),
         critical=sum(i.priority == Priority.P0 for i in active),
         overdue=sum(i.overdue for i in active),
-        awaiting_reply=sum(i.awaiting_reply for i in active),
+        # Players the managers owe a reply; escalations are counted in `escalated`.
+        awaiting_reply=sum(i.reply_state == ReplyState.MANAGER for i in active),
         escalated=sum(i.route != Route.MANAGER for i in active),
         # Mistakes are about how a contact went, so closed conversations count too.
         quality_issues=sum(bool(i.quality_flags or i.manager_errors) for i in items),
@@ -59,7 +61,11 @@ def _managers(items: list[QueueItem]) -> list[ManagerLoad]:
     loads = []
     for manager_id, group in groups.items():
         active = [i for i in group if _active(i)]
-        waits = [i.wait_hours for i in active if i.awaiting_reply and i.wait_hours is not None]
+        waits = [
+            i.wait_hours
+            for i in active
+            if i.reply_state == ReplyState.MANAGER and i.wait_hours is not None
+        ]
         loads.append(
             ManagerLoad(
                 manager_id=manager_id,

@@ -200,3 +200,12 @@ describe("team lead page: review group wording", () => {
     expect(group).toHaveTextContent(/правило безопасности/);
   });
 });
+
+describe("team lead page: overdue means the «Горит» lane", () => {
+  it("says escalations are not in «Просрочен ответ»", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [late] });
+    renderLead();
+    const tiles = within(await screen.findByRole("list", { name: "Ключевые показатели" }));
+    expect(tiles.getByText("Просрочен ответ").closest("li")).toHaveTextContent("колонка «Горит», без эскалаций");
+  });
+});

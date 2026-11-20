@@ -314,7 +314,9 @@ describe("queue page: why a long wait is low priority", () => {
       conversation_id: "d-030",
       player: { player_id: "p-030", display_name: "Demo Player 030", manager_id: "mgr-01", segment: "gold" },
       priority: "P3",
-      wait_hours: 143,
+      wait_hours: null,
+      awaiting_reply: false,
+      reply_state: "no_reply_needed",
       overdue: false,
       sla_lane: "ok",
     });
@@ -331,7 +333,7 @@ describe("queue page: why a long wait is low priority", () => {
     serveApi(vi, { "/api/meta": meta, "/api/queue": [thanks, theirTurn] });
     renderQueue();
     const [first, second] = await screen.findAllByRole("link", { name: /Demo Player 03/ });
-    expect(first).toHaveTextContent("не требует ответа");
+    expect(first).toHaveTextContent("не требует ответа (AI)");
     expect(second).toHaveTextContent("ход за игроком");
     expect(screen.getByText(/кольцо заполняется/)).toBeInTheDocument();
   });

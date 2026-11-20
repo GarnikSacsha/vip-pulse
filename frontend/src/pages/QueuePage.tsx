@@ -352,12 +352,12 @@ function QueueRow({ item, search }: { item: QueueItem; search: string }) {
             item.sla_lane === "breached" ? "font-medium text-danger" : item.awaiting_reply ? "text-ink" : "text-muted"
           }`}
         >
-          {item.awaiting_reply ? formatWait(item.wait_hours) : "ход за игроком"}
+          {item.awaiting_reply
+            ? formatWait(item.wait_hours)
+            : item.reply_state === "no_reply_needed"
+              ? "не требует ответа (AI)"
+              : "ход за игроком"}
         </span>
-        {/* Why a long wait can still be low priority: nothing in the last message needs an answer. */}
-        {item.awaiting_reply && item.sla_lane === "ok" && (
-          <span className="text-right text-xs text-muted">не требует ответа</span>
-        )}
       </div>
     </NavLink>
   );

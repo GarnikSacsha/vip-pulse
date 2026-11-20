@@ -5,7 +5,7 @@ from datetime import date, datetime
 from pydantic import BaseModel
 
 from app.policy.priority import Route
-from app.policy.sla import SlaLane
+from app.policy.sla import ReplyState, SlaLane
 from app.schemas.analysis import (
     Category,
     ManagerError,
@@ -124,8 +124,9 @@ class QueueItem(BaseModel):
     sentiment: Sentiment | None  # the player's tone, for the dossier trend; None when failed
     summary: str | None
     next_action: str | None
-    wait_hours: float | None
-    awaiting_reply: bool
+    wait_hours: float | None  # only while someone owes the player a reply
+    awaiting_reply: bool  # the manager or a specialist owes a reply (reply_state)
+    reply_state: ReplyState  # app.policy.sla: one source for every wait and overdue number
     # Active work (open / in progress) whose player waits longer than the channel's SLA.
     overdue: bool
     sla_hours: float  # the channel's response SLA under the current thresholds
@@ -183,10 +184,12 @@ class TaskOut(BaseModel):
 
 class FactsOut(BaseModel):
     as_of: datetime
-    awaiting_reply: bool
-    wait_hours: float | None
+    awaiting_reply: bool  # someone owes the player a reply (reply_state)
+    wait_hours: float | None  # only while someone owes a reply
     response_sla_hours: float
-    sla_breached: bool
+    sla_breached: bool  # never when the analysis said no reply is needed
+    reply_state: ReplyState | None  # None before the first triage
+    raw_wait_hours: float | None  # time since the player's last message, whoever owes
     median_response_minutes: float | None
 
 

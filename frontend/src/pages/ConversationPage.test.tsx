@@ -376,3 +376,26 @@ describe("conversation pane: wording", () => {
     expect(await screen.findByText("Приоритет: критичный")).toBeInTheDocument();
   });
 });
+
+describe("conversation pane: one source for waiting", () => {
+  it("shows «no reply needed» as an AI fact and never a breached SLA", async () => {
+    const base = detail();
+    serve({
+      ...base,
+      messages: base.messages.map((m) => ({ ...m, is_pending: false })),
+      facts: {
+        ...base.facts,
+        awaiting_reply: false,
+        wait_hours: null,
+        sla_breached: false,
+        reply_state: "no_reply_needed",
+        raw_wait_hours: 189,
+      },
+    });
+    renderPage();
+    const facts = await screen.findByRole("region", { name: "Факты" });
+    expect(facts).toHaveTextContent("Ответ не требуется (AI)");
+    expect(facts).toHaveTextContent("последнее сообщение игрока 7 д 21 ч назад");
+    expect(facts).not.toHaveTextContent("нарушен");
+  });
+});

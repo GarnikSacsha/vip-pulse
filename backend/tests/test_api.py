@@ -220,7 +220,8 @@ def test_queue_marks_overdue_only_active_items_past_their_sla(client: TestClient
     items = {i["conversation_id"]: i for i in client.get("/api/queue").json()}
     assert {c for c, i in items.items() if i["overdue"]} == {"d-001"}
     # d-003 waits 73 h but needs no action (closing message): not overdue work.
-    assert items["d-003"]["awaiting_reply"] is True
+    assert items["d-003"]["awaiting_reply"] is False  # one source: no reply needed (0017)
+    assert items["d-003"]["reply_state"] == "no_reply_needed"
     assert items["d-003"]["overdue"] is False
     # d-009 is email: 5.75 h is inside its 8 h SLA.
     assert items["d-009"]["overdue"] is False
@@ -242,7 +243,7 @@ def test_overview_totals(client: TestClient) -> None:
         "in_progress": 0,
         "critical": 3,
         "overdue": 1,
-        "awaiting_reply": 4,
+        "awaiting_reply": 3,  # d-009 waits for security, not a manager (0017)
         "escalated": 2,
         "quality_issues": 3,  # d-004 bonus (code), d-001 and d-005 (analysis)
         "needs_review": 2,
@@ -271,7 +272,7 @@ def test_overview_workload_by_manager(client: TestClient) -> None:
             "in_progress": 0,
             "critical": 2,
             "overdue": 0,
-            "oldest_wait_hours": 5.75,
+            "oldest_wait_hours": None,  # d-009 waits for security (0017)
             "errors": 1,
         },
     ]

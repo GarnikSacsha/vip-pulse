@@ -186,7 +186,12 @@ function LeadKpis({ overview }: { overview: Overview }) {
     <KpiList
       items={[
         { label: "Активные", value: t.active, hint: `в работе ${t.in_progress}` },
-        { label: "Просрочен ответ", value: t.overdue, tone: t.overdue ? "alert" : "plain" },
+        {
+          label: "Просрочен ответ",
+          value: t.overdue,
+          hint: "колонка «Горит», без эскалаций",
+          tone: t.overdue ? "alert" : "plain",
+        },
         { label: "Эскалации", value: t.escalated, hint: "RG и безопасность" },
         { label: "Ошибки менеджеров", value: t.quality_issues, tone: t.quality_issues ? "alert" : "plain" },
         { label: "Нужна проверка", value: t.needs_review },

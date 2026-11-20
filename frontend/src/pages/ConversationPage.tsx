@@ -578,13 +578,27 @@ function Facts({
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="text-muted">Ожидание</dt>
         <dd>
-          <span className="tabular-nums">{facts.awaiting_reply ? formatWait(facts.wait_hours) : "игрок не ждёт"}</span>
+          {facts.reply_state === "no_reply_needed" ? (
+            // The model's decision, shown as such; the SLA does not apply to it.
+            <span>
+              Ответ не требуется (AI)
+              {facts.raw_wait_hours !== null && (
+                <span className="block text-xs text-muted">
+                  последнее сообщение игрока {formatWait(facts.raw_wait_hours)} назад
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className="tabular-nums">{facts.awaiting_reply ? formatWait(facts.wait_hours) : "игрок не ждёт"}</span>
+          )}
           {facts.awaiting_reply && <Pills ids={pending} highlight={highlight} />}
         </dd>
         {/* The channel's response SLA. The money escalation threshold is a separate rule: see reasons. */}
         <dt className="text-muted">SLA канала</dt>
         <dd className={facts.sla_breached ? "text-danger" : ""}>
-          {`${facts.response_sla_hours} ч, ${facts.sla_breached ? "нарушен" : "в пределах"}`}
+          {facts.awaiting_reply
+            ? `${facts.response_sla_hours} ч, ${facts.sla_breached ? "нарушен" : "в пределах"}`
+            : `${facts.response_sla_hours} ч, сейчас не применяется`}
         </dd>
         {facts.median_response_minutes !== null && (
           <>

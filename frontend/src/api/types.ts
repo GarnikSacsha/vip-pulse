@@ -7,6 +7,8 @@ export type Channel = "telegram" | "whatsapp" | "email" | "other";
 export type SenderRole = "player" | "manager" | "system";
 /** Mirrors backend/app/policy/sla.py: decided by thresholds, never by the model. */
 export type SlaLane = "breached" | "at_risk" | "waiting" | "specialist" | "ok";
+/** Who owes the next message: the one source for every wait and overdue number (decision 0017). */
+export type ReplyState = "players_turn" | "no_reply_needed" | "manager" | "specialist";
 export type Sentiment = "positive" | "neutral" | "negative" | "mixed";
 export type Category =
   | "withdrawal"
@@ -103,8 +105,9 @@ export interface QueueItem {
   summary: string | null;
   next_action: string | null;
   wait_hours: number | null;
-  awaiting_reply: boolean;
-  /** Active work whose player waits longer than the channel's SLA. */
+  awaiting_reply: boolean; // the manager or a specialist owes a reply
+  reply_state: ReplyState;
+  /** Active work where the manager owes a reply past the channel's SLA (lane «Горит»). */
   overdue: boolean;
   /** The channel's response SLA under the current thresholds. */
   sla_hours: number;
@@ -174,6 +177,8 @@ export interface ConversationDetail {
     wait_hours: number | null;
     response_sla_hours: number;
     sla_breached: boolean;
+    reply_state: ReplyState | null;
+    raw_wait_hours: number | null; // since the player's last message, whoever owes
     median_response_minutes: number | null;
   };
 }

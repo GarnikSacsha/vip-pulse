@@ -1,6 +1,27 @@
-"""Which SLA lane a work item belongs to. Used by the team lead board and the pulse indicator."""
+"""Who owes the next message, and which SLA lane a work item belongs to.
+
+`reply_state` is the single source of truth for "the player is waiting for the manager"
+(decision 0017). The raw fact (the player wrote last) is corrected by two decisions: the analysis
+may say nothing needs an answer («спасибо, всё пришло»), and an escalated case is the
+specialist's. Lanes, overdue counts, waits and the conversation facts all derive from it.
+"""
 
 from enum import StrEnum
+
+
+class ReplyState(StrEnum):
+    PLAYERS_TURN = "players_turn"  # the manager wrote last
+    NO_REPLY_NEEDED = "no_reply_needed"  # the player wrote last; the analysis: nothing to answer
+    MANAGER = "manager"  # the player waits for the manager
+    SPECIALIST = "specialist"  # the player waits; the case is with a specialist
+
+
+def reply_state(*, awaiting_reply: bool, reply_needed: bool, escalated: bool) -> ReplyState:
+    if not awaiting_reply:
+        return ReplyState.PLAYERS_TURN
+    if escalated:  # a safety case never reads "no reply needed"
+        return ReplyState.SPECIALIST
+    return ReplyState.MANAGER if reply_needed else ReplyState.NO_REPLY_NEEDED
 
 
 class SlaLane(StrEnum):
@@ -32,8 +53,8 @@ def sla_lane(
     """
     if active and escalated:
         return SlaLane.SPECIALIST
-    # "Спасибо, всё пришло": the player spoke last, but there is nothing to answer.
-    if not active or not awaiting_reply or not reply_needed or wait_hours is None:
+    state = reply_state(awaiting_reply=awaiting_reply, reply_needed=reply_needed, escalated=False)
+    if not active or state != ReplyState.MANAGER or wait_hours is None:
         return SlaLane.OK
     if breached:
         return SlaLane.BREACHED

@@ -30,7 +30,7 @@ from app.models import AnalysisRow, ConversationRow, PlayerRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.policy.facts import compute_facts
 from app.policy.priority import LABEL_MODEL, LABEL_SIMULATED, Route
-from app.policy.sla import sla_lane
+from app.policy.sla import ReplyState, reply_state, sla_lane
 from app.schemas.analysis import ManagerError, Priority, ProcessingStatus
 from app.tasks.service import TaskStatus, ledger_spent
 
@@ -157,10 +157,24 @@ ACTIVE = frozenset({TaskStatus.OPEN, TaskStatus.IN_PROGRESS})
 SLA_BREACH_REASONS = frozenset({"sla.breached", "sla.money_critical"})
 
 
+def task_reply_state(task: TaskRow) -> ReplyState:
+    """Who owes the next message: the one source for waits, lanes and overdue counts (0017)."""
+    return reply_state(
+        awaiting_reply=task.awaiting_reply,
+        reply_needed=not any(r.get("code") == "sla.no_reply_needed" for r in task.reasons),
+        escalated=task.route != Route.MANAGER,
+    )
+
+
 def is_overdue(task: TaskRow) -> bool:
-    """Active work that the last triage found waiting longer than the channel's SLA."""
-    return TaskStatus(task.status) in ACTIVE and any(
-        r.get("code") in SLA_BREACH_REASONS for r in task.reasons
+    """Active work where the manager owes a reply past the channel's SLA («Горит»).
+
+    Escalated cases are counted in «У специалиста», not here.
+    """
+    return (
+        TaskStatus(task.status) in ACTIVE
+        and task_reply_state(task) == ReplyState.MANAGER
+        and any(r.get("code") in SLA_BREACH_REASONS for r in task.reasons)
     )
 
 
@@ -210,6 +224,8 @@ def list_queue(
             continue
         result = _result(analysis)
         sla_hours = sla.response_hours_for(conv.channel)
+        state = task_reply_state(task)
+        waiting = state in (ReplyState.MANAGER, ReplyState.SPECIALIST)
         items.append(
             QueueItem(
                 task_id=task.id,
@@ -223,8 +239,9 @@ def list_queue(
                 sentiment=result.get("sentiment"),
                 summary=result.get("summary"),
                 next_action=task.next_action,
-                wait_hours=task.wait_hours if task.awaiting_reply else None,
-                awaiting_reply=task.awaiting_reply,
+                wait_hours=task.wait_hours if waiting else None,
+                awaiting_reply=waiting,
+                reply_state=state,
                 overdue=late,
                 sla_hours=sla_hours,
                 sla_lane=sla_lane(
@@ -273,7 +290,9 @@ def conversation_detail(
     errors = _manager_errors(result)
     evidence = set(result.get("evidence_message_ids", []))
     evidence.update(i for e in errors for i in e.evidence_message_ids)
-    pending = set(facts.pending_message_ids)
+    state = task_reply_state(task) if task is not None else None
+    owed = facts.awaiting_reply if state is None else state != ReplyState.NO_REPLY_NEEDED
+    pending = set(facts.pending_message_ids) if owed else set()
 
     analysis_out = None
     if analysis is not None:
@@ -315,10 +334,12 @@ def conversation_detail(
         task=task_out,
         facts=FactsOut(
             as_of=facts.as_of,
-            awaiting_reply=facts.awaiting_reply,
-            wait_hours=facts.wait_hours,
+            awaiting_reply=facts.awaiting_reply and owed,
+            wait_hours=facts.wait_hours if owed else None,
             response_sla_hours=facts.response_sla_hours,
-            sla_breached=facts.sla_breached,
+            sla_breached=facts.sla_breached and owed,
+            reply_state=state,
+            raw_wait_hours=facts.wait_hours,
             median_response_minutes=facts.median_response_minutes,
         ),
     )
