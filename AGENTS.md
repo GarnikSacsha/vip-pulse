@@ -106,7 +106,8 @@ system temp directory on the dev machine cannot be cleaned by pytest.
 - Stage 3 (UI design from `design/README.md`): PR #5, merged. Fonts are self-hosted assets in
   `frontend/public/fonts/` (approved by Denys, 2026-11-19), not npm packages.
 - Gold set and `eval` command: PR #6, merged. Task-file adapter `task_v1`: PR #7, merged.
-- Player signals (decision 0011): PR #8. Then: one-page brief, screenshots, demo.
+- Player signals (decision 0011): PR #8, merged. Alerts, «Кого вернуть», brief: PR #9, merged.
+- Manager audit fixes (decisions 0013–0016): PR #10, draft. Then: screenshots, demo video.
 - Deadline: task received 2026-11-18, submission 2026-11-20.
 - Strict TDD with RED/GREEN evidence recorded in every PR.
 - Commit map: written before each stage; one atomic GREEN commit per coherent outcome.

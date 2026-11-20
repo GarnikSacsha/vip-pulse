@@ -21,7 +21,8 @@ dialogs.json ┴─► adapter ─► pipeline checks ─► SQLite
         facts (code)       LLM analysis           safety net (keywords)
         wait, SLA,         category, sentiment,   responsible gaming,
         pending msgs       next action, evidence  fraud, offers to
-                           ids, confidence        vulnerable players
+                           ids, confidence,       vulnerable players
+                           manager mistakes
                 │          strict schema, fail       │
                 │          closed on bad evidence    │
                 └──────────────────┬────────────────────┘
@@ -32,9 +33,11 @@ dialogs.json ┴─► adapter ─► pipeline checks ─► SQLite
                      work items (one per conversation) + audit trail
                      analyses cached by input hash
                                    ▼
-             FastAPI  /api/queue · /api/conversations · /api/tasks
+             FastAPI  /api/queue · /api/conversations · /api/tasks · /api/overview
+                      /api/winback · /api/birthdays
                                    ▼
-             React UI: queue → conversation with evidence → status change
+             React UI: queue → conversation with evidence → status change;
+             team lead and head-of-VIP views; demo role switcher (not authorisation)
 ```
 
 ## Modules
@@ -60,7 +63,16 @@ Full records with evidence and rejected alternatives are in [`docs/decisions/`](
 [0004 reference time](decisions/0004-dataset-reference-time.md),
 [0005 safety net and simulated output](decisions/0005-safety-net-and-simulated-output.md),
 [0006 languages, provider, dependencies](decisions/0006-conventions-and-dependencies.md),
-[0007 work item lifecycle and analysis cache](decisions/0007-work-item-lifecycle-and-analysis-cache.md).
+[0007 work item lifecycle and analysis cache](decisions/0007-work-item-lifecycle-and-analysis-cache.md),
+[0008 Gemini and spending cap](decisions/0008-gemini-provider-and-spending-cap.md),
+[0009 inbox and SLA lanes](decisions/0009-inbox-layout-and-sla-lanes.md),
+[0010 task data adapter](decisions/0010-task-data-adapter.md),
+[0011 player signals](decisions/0011-player-signals.md),
+[0012 alerts and win-back](decisions/0012-alerts-and-winback.md),
+[0013 specialist lane](decisions/0013-specialist-lane.md),
+[0014 manager mistakes](decisions/0014-manager-errors.md),
+[0015 demo roles](decisions/0015-demo-roles.md),
+[0016 birthdays and open requests](decisions/0016-birthdays-and-open-requests.md).
 
 - **Adapter per format.** The real `dialogs.json` / `players.csv` were not available when the
   foundation was built. The internal model is ours; only a new adapter is needed for the real files.
@@ -94,4 +106,10 @@ Full records with evidence and rejected alternatives are in [`docs/decisions/`](
    computed from the same queue the managers see.
 5. **Done — stage 3 (UI design):** three-pane inbox, evidence pills, player dossier, pulse
    indicator, SLA lanes ([0009](decisions/0009-inbox-layout-and-sla-lanes.md)).
-6. **Then:** gold set evaluation, screenshots, one-page brief, demo.
+6. **Done:** gold set and `eval`, task-file adapter, player signals, personal-contact alerts,
+   «Кого вернуть», one-page brief.
+7. **Done — manager audit fixes (2026-11-20):** specialist lane, manager mistakes from the
+   analysis, demo roles, full player card, birthdays, win-back linked to the queue, thresholds
+   re-read on change, JSON-only paid run.
+8. **Next:** sign-in and real roles checked in the API; reply drafts for the manager to review
+   (never sent automatically); 10–20 labelled real conversations for `eval`.
