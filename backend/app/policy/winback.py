@@ -12,7 +12,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict
 
 from app.policy.config import PolicyConfig
-from app.policy.player import _number, _usd
+from app.policy.player import _number, _usd, is_deposit_spike
 from app.policy.priority import Reason
 from app.schemas.domain import Player
 
@@ -153,7 +153,7 @@ def winback(
 
         now = _number(attrs.get("deposits_30d_usd"))
         before = _number(attrs.get("deposits_prev_30d_usd"))
-        if now is not None and before and now >= before * cfg.player.deposit_spike_ratio:
+        if now is not None and before and is_deposit_spike(now, before, cfg):
             continue  # a sharp rise is a harm-risk signal, not a reason to reach out with promo
         if now is not None and before:
             if now == 0:

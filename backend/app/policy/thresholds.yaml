@@ -102,6 +102,7 @@ player:
   pending_withdrawal_usd: 1000   # a payout this large is waiting = money problem
   deposit_drop_share: 0.5        # deposits fell below half of the previous 30 days = churn risk
   deposit_spike_ratio: 1.7       # deposits grew 1.7x or more = check for harm, human review
+  deposit_spike_min_usd: 1000    # ...and by at least $1 000 (assumption: $700 → $1 200 is not a spike)
 
 # Who to win back (page «Кого вернуть»). Restricted accounts are never listed.
 winback:

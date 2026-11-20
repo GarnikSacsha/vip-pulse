@@ -52,6 +52,8 @@ class PlayerConfig(_Cfg):
     pending_withdrawal_usd: float = Field(default=1000, gt=0)
     deposit_drop_share: float = Field(default=0.5, gt=0, lt=1)  # now < share × previous 30 days
     deposit_spike_ratio: float = Field(default=1.7, gt=1)  # now > ratio × previous 30 days
+    # ...and grew by at least this much in USD: small sums are not a harm signal (assumption).
+    deposit_spike_min_usd: float = Field(default=1000, ge=0)
 
 
 class WinbackConfig(_Cfg):

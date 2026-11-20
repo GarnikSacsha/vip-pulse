@@ -292,3 +292,31 @@ def test_profile_step_never_replaces_the_specialist_template() -> None:
     d = _decide(QUIET, _player(account_status="self_excluded", pending_withdrawal_usd="2800"))
     assert d.route == Route.RG_SPECIALIST
     assert "вывод" not in (d.next_action or "").lower()
+
+
+def test_small_deposit_growth_is_not_a_spike() -> None:
+    # $700 → $1 200 is 1.7x but only $500 more: below deposit_spike_min_usd, not a harm signal.
+    assert CFG.player.deposit_spike_min_usd == 1000
+    d = _decide(QUIET, _player(deposits_30d_usd="1200", deposits_prev_30d_usd="700"))
+    assert "player.deposit_spike" not in [r.code for r in d.reasons]
+    d = _decide(QUIET, _player(deposits_30d_usd="9800", deposits_prev_30d_usd="5200"))
+    assert "player.deposit_spike" in [r.code for r in d.reasons]
+
+
+def test_win_back_uses_the_same_spike_rule() -> None:
+    from app.policy.winback import winback
+
+    p = Player(
+        player_id="w",
+        manager_id="m",
+        segment="VIP",
+        attributes={
+            "account_status": "active",
+            "last_login_at": "2026-01-09",
+            "deposits_30d_usd": "1200",
+            "deposits_prev_30d_usd": "700",
+        },
+    )
+    # Not a spike any more, so the never-contacted player is offered for an introduction.
+    [item] = winback([p], {}, T0, CFG)
+    assert item.player.player_id == "w"
