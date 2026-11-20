@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppRoutes } from "../App";
-import { meta, overview, queueItem, serveApi } from "../test/fixtures";
+import { parseRole, sectionsOf } from "./role";
+import { conversation, meta, overview, queueItem, serveApi } from "../test/fixtures";
 
 const KEY = "vip-pulse-role";
 
@@ -71,11 +72,61 @@ describe("demo role switcher", () => {
     expect(navLinks()).toEqual(["Очередь", "Команда"]);
   });
 
-  it("gives the head of VIP the overview and the team page", async () => {
+  it("starts the head of VIP on the overview, with the team page and a read-only queue", async () => {
     localStorage.setItem(KEY, "head");
     serveApi(vi, routes());
-    renderAt("/queue");
+    renderAt("/");
     expect(await screen.findByRole("heading", { name: /Обзор|Сводка/ })).toBeInTheDocument();
-    expect(navLinks()).toEqual(["Обзор", "Команда"]);
+    expect(navLinks()).toEqual(["Обзор", "Команда", "Очередь"]);
+  });
+});
+
+describe("demo roles: links and read-only queue", () => {
+  it("opens «Открыть критичные» for the head of VIP as a read-only queue", async () => {
+    localStorage.setItem(KEY, "head");
+    serveApi(vi, { ...routes(), "/api/conversations/d-001": conversation() });
+    renderAt("/queue/d-001?priority=P0");
+    expect(await screen.findByRole("list", { name: "Очередь" })).toBeInTheDocument();
+    expect(navLinks()).toEqual(["Обзор", "Команда", "Очередь"]);
+    expect(await screen.findByText(/Режим просмотра/)).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Действия" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["all", ["/queue", "/winback", "/lead", "/overview"]],
+    ["manager:mgr-01", ["/queue", "/winback"]],
+    ["lead", ["/queue", "/lead"]],
+    ["head", ["/overview", "/lead", "/queue"]],
+  ])("every link visible to %s opens a page that role can see", async (value, pages) => {
+    localStorage.setItem(KEY, value);
+    const winback = [
+      {
+        player: { player_id: "p-041", display_name: null, manager_id: "mgr-01", segment: "VIP" },
+        tier: "urgent",
+        reasons: [],
+        next_action: "x",
+        last_login_days: 20,
+        last_contact_days: 3,
+        deposits_30d_usd: 0,
+        deposits_prev_30d_usd: 100,
+        favorite_game: null,
+        latest_conversation_id: "d-001",
+      },
+    ];
+    serveApi(vi, { ...routes(), "/api/winback": winback, "/api/birthdays": [] });
+    for (const page of pages.filter((p) => sectionsOf(parseRole(value)).includes(p))) {
+      const { unmount } = renderAt(page);
+      await screen.findByRole("navigation", { name: "Разделы" });
+      await screen.findAllByRole("heading", { level: 1 }).catch(() => null);
+      const hrefs = screen
+        .getAllByRole("link")
+        .map((a) => a.getAttribute("href") ?? "")
+        .filter((h) => h.startsWith("/"));
+      for (const href of hrefs) {
+        const section = "/" + (href.split(/[/?#]/)[1] ?? "");
+        expect(sectionsOf(parseRole(value)), `${value} on ${page}: ${href}`).toContain(section);
+      }
+      unmount();
+    }
   });
 });

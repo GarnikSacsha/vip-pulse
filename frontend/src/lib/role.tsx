@@ -25,8 +25,14 @@ const SECTIONS: Record<Role["kind"], string[]> = {
   all: ["/queue", "/winback", "/lead", "/overview"],
   manager: ["/queue", "/winback"],
   lead: ["/queue", "/lead"],
-  head: ["/overview", "/lead"],
+  // The head of VIP drills down from the overview into a read-only queue (decision 0018).
+  head: ["/overview", "/lead", "/queue"],
 };
+
+/** Roles that only look: no status changes from the UI (still not authorisation). */
+export function isReadOnly(role: Role): boolean {
+  return role.kind === "head";
+}
 
 export function sectionsOf(role: Role): string[] {
   return SECTIONS[role.kind];

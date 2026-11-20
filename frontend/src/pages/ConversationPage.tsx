@@ -17,6 +17,7 @@ import {
   alertText,
   qualityFlagLabel,
 } from "../lib/labels";
+import { isReadOnly, useRole } from "../lib/role";
 import { useApi } from "../lib/useApi";
 import type { InboxContext, PaneTab } from "./QueuePage";
 
@@ -405,6 +406,7 @@ function Card({
 }
 
 function NextStep({ task, onChanged }: { task: TaskOut; onChanged: () => void }) {
+  const readOnly = isReadOnly(useRole().role);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -436,6 +438,10 @@ function NextStep({ task, onChanged }: { task: TaskOut; onChanged: () => void })
         {task.requires_review && <Tag tone="warn">Нужна проверка человеком</Tag>}
       </div>
 
+      {readOnly ? (
+        <p className="mt-4 text-xs text-muted">Режим просмотра: статус меняет менеджер или тимлид.</p>
+      ) : (
+        <>
       <label htmlFor="action-note" className="mt-4 block text-xs text-muted">
         Комментарий к действию
       </label>
@@ -467,6 +473,8 @@ function NextStep({ task, onChanged }: { task: TaskOut; onChanged: () => void })
         <p role="alert" className="mt-2 text-sm text-danger">
           {error}
         </p>
+      )}
+        </>
       )}
     </Card>
   );

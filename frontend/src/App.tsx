@@ -52,6 +52,12 @@ function RoleSwitcher({ managers }: { managers: string[] }) {
   );
 }
 
+/** The start page: the first section of the current role. */
+function RoleHome() {
+  const { role } = useRole();
+  return <Navigate to={sectionsOf(role)[0] ?? "/queue"} replace />;
+}
+
 /** A section the current role does not see opens the role's first section instead. */
 function Gate({ path, children }: { path: string; children: ReactNode }) {
   const { role } = useRole();
@@ -146,7 +152,7 @@ export function AppRoutes() {
     <RoleProvider>
       <Routes>
         <Route element={<Shell />}>
-          <Route index element={<Navigate to="/queue" replace />} />
+          <Route index element={<RoleHome />} />
           <Route
             path="queue"
             element={
