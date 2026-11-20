@@ -27,6 +27,11 @@ const VIEWS: ViewDef[] = [
 ];
 const PRIORITIES: Priority[] = ["P0", "P1", "P2", "P3"];
 
+function managerCount(view: ViewDef, items: QueueItem[] | null): number | null {
+  if (!items) return null;
+  return view.statuses ? items.filter((i) => view.statuses?.includes(i.status)).length : items.length;
+}
+
 function viewCount(view: ViewDef, meta: Meta | null): number | null {
   if (!meta) return null;
   if (!view.statuses) return meta.counts.total;
@@ -79,6 +84,11 @@ export function QueuePage() {
     ...(manager ? { manager: [manager] } : {}),
   };
   const queue = useApi(() => api.queue(filters), JSON.stringify(filters));
+  // All of one manager's items, for the tab counts (the department counts come from meta).
+  const mine = useApi(
+    () => (manager ? api.queue({ manager: [manager] }) : Promise.resolve(null)),
+    `mine:${manager ?? ""}:${queue.data?.length ?? ""}`,
+  );
 
   // j / k: next and previous conversation, wherever the focus is, except inside text fields.
   const items = queue.data;
@@ -182,7 +192,8 @@ export function QueuePage() {
             {VIEWS.map((v) => {
               const isSelected = v.id === view.id;
               // Meta counts the whole department: wrong on one manager's queue, so hidden there.
-              const count = manager ? null : viewCount(v, meta);
+              // Meta counts the department; a manager's queue is counted over their own players.
+              const count = manager ? managerCount(v, mine.data) : viewCount(v, meta);
               return (
                 <button
                   key={v.id}
@@ -342,7 +353,9 @@ function QueueRow({ item, search }: { item: QueueItem; search: string }) {
           )}
           {item.simulated && <Tag>демо</Tag>}
         </div>
-        {item.next_action && <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted">{item.next_action}</p>}
+        <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted">
+          {item.next_action ?? "Действий не требуется"}
+        </p>
       </div>
 
       <div className="flex flex-col items-end gap-1.5">

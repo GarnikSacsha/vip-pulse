@@ -119,7 +119,7 @@ describe("queue page: oversight links", () => {
     const calls = serveApi(vi, { "/api/meta": meta, "/api/queue": [queueItem()] });
     renderQueue("/queue?manager=mgr-01");
     await screen.findAllByRole("link", { name: /Demo Player/ });
-    expect(queueCalls(calls).at(-1)).toBe("/api/queue?status=open&status=in_progress&manager=mgr-01");
+    expect(queueCalls(calls)).toContain("/api/queue?status=open&status=in_progress&manager=mgr-01");
 
     await user.click(screen.getByRole("button", { name: /Менеджер mgr-01/ }));
     expect(queueCalls(calls).at(-1)).toBe("/api/queue?status=open&status=in_progress");
@@ -138,7 +138,8 @@ describe("queue page: review fixes", () => {
     serveApi(vi, { "/api/meta": meta, "/api/queue": [queueItem()] });
     renderQueue("/queue?manager=mgr-01");
     await screen.findAllByRole("link", { name: /Demo Player/ });
-    expect(screen.getByRole("tab", { name: "Активные" })).toBeInTheDocument();
+    // Counted over this manager's items, never the department-wide 6 from meta.
+    expect(await screen.findByRole("tab", { name: "Активные 1" })).toBeInTheDocument();
   });
 
   it("points at the manager filter when it empties the list", async () => {
@@ -336,5 +337,30 @@ describe("queue page: why a long wait is low priority", () => {
     expect(first).toHaveTextContent("не требует ответа (AI)");
     expect(second).toHaveTextContent("ход за игроком");
     expect(screen.getByText(/кольцо заполняется/)).toBeInTheDocument();
+  });
+});
+
+describe("queue page: small fixes", () => {
+  it("says «Действий не требуется» for a low priority without a next step", async () => {
+    const quiet = queueItem({ task_id: 50, conversation_id: "d-050", priority: "P3", next_action: null, overdue: false, sla_lane: "ok" });
+    serveApi(vi, { "/api/meta": meta, "/api/queue": [quiet] });
+    renderQueue();
+    const [row] = await screen.findAllByRole("link", { name: /Demo Player 001/ });
+    expect(row).toHaveTextContent("Действий не требуется");
+  });
+
+  it("counts the tabs over the manager's own players in the manager role", async () => {
+    localStorage.setItem("vip-pulse-role", "manager:mgr-01");
+    const mine = [
+      queueItem(),
+      queueItem({ task_id: 51, conversation_id: "d-051", status: "resolved" }),
+      queueItem({ task_id: 52, conversation_id: "d-052", status: "no_action" }),
+    ];
+    serveApi(vi, { "/api/meta": meta, "/api/queue": (url: string) => (url.includes("status=") ? [mine[0]] : mine) });
+    renderQueue();
+    const tabs = await screen.findAllByRole("tab");
+    await screen.findByText("3");
+    expect(tabs.map((t) => t.textContent)).toEqual(["Активные 1", "Все 3", "Решённые 1", "Без действий 1"]);
+    localStorage.clear();
   });
 });
