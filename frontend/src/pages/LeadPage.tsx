@@ -64,7 +64,7 @@ export function LeadPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Контроль команды</h1>
         <p className="mt-0.5 text-sm text-muted">
-          Что горит по SLA, что ушло в эскалацию и где менеджер ошибся. Только активные диалоги.
+          Что горит по SLA, что ушло в эскалацию и где менеджер ошибся. SLA и группы — по активным диалогам, ошибки менеджеров — по всем.
         </p>
       </div>
 

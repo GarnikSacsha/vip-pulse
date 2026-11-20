@@ -178,7 +178,7 @@ export function QueuePage() {
             </button>
           )}
 
-          <div role="tablist" className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-b border-line text-sm">
+          <div role="tablist" className="mt-3 flex flex-wrap gap-x-2.5 gap-y-1 border-b border-line text-[13px]">
             {VIEWS.map((v) => {
               const isSelected = v.id === view.id;
               // Meta counts the whole department: wrong on one manager's queue, so hidden there.
@@ -190,7 +190,7 @@ export function QueuePage() {
                   type="button"
                   aria-selected={isSelected}
                   onClick={() => update({ view: v.id })}
-                  className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 pb-2 ${
+                  className={`-mb-px flex shrink-0 items-center gap-1 border-b-2 pb-2 ${
                     isSelected ? "border-ink font-medium text-ink" : "border-transparent text-muted hover:text-ink"
                   }`}
                 >
