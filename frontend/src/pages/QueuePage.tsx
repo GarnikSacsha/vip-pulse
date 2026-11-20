@@ -6,6 +6,7 @@ import { PriorityBadge, Tag } from "../components/Badges";
 import { Pulse } from "../components/Pulse";
 import { formatWait } from "../lib/format";
 import { CATEGORY_LABEL, CHANNEL_LABEL, ROUTE_LABEL, STATUS_LABEL, alertText, qualityFlagLabel } from "../lib/labels";
+import { managerOf, useRole } from "../lib/role";
 import { useApi } from "../lib/useApi";
 
 type View = "active" | "all" | "resolved" | "no_action";
@@ -68,7 +69,9 @@ export function QueuePage() {
   const [params, setParams] = useSearchParams();
   const view = VIEWS.find((v) => v.id === params.get("view")) ?? ACTIVE_VIEW;
   const priority = PRIORITIES.find((p) => p === params.get("priority"));
-  const manager = params.get("manager");
+  // A manager role sees only their own players (demo filter, not authorisation).
+  const roleManager = managerOf(useRole().role);
+  const manager = roleManager ?? params.get("manager");
 
   const filters: QueueFilters = {
     ...(view.statuses ? { status: view.statuses } : {}),
@@ -160,7 +163,7 @@ export function QueuePage() {
               <kbd className="font-mono">j</kbd>/<kbd className="font-mono">k</kbd> — следующий и предыдущий.
             </span>
           </p>
-          {manager && (
+          {manager && !roleManager && (
             <button
               type="button"
               onClick={clearManager}

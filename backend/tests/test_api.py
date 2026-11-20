@@ -458,3 +458,8 @@ def test_conversation_marks_manager_error_messages_as_evidence(client: TestClien
     ]
     cited = {m["message_id"]: m["is_evidence"] for m in body["messages"]}
     assert cited["m-005-2"] is True
+
+
+def test_meta_lists_managers_from_the_data(client: TestClient) -> None:
+    # For the demo role switcher: the managers come from players.csv, nothing is hard-coded.
+    assert client.get("/api/meta").json()["managers"] == ["mgr-01", "mgr-02"]

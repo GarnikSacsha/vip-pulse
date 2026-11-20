@@ -20,6 +20,7 @@ function meta(simulated: boolean): Meta {
       by_status: { open: 5, in_progress: 0, resolved: 0, no_action: 4 },
       by_priority: { P0: 3, P1: 1, P2: 1, P3: 4 },
     },
+    managers: ["mgr-01", "mgr-02"],
   };
 }
 

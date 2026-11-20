@@ -8,6 +8,7 @@ export const meta: Meta = {
     by_status: { open: 5, in_progress: 1, resolved: 1, no_action: 2 },
     by_priority: { P0: 3, P1: 1, P2: 1, P3: 4 },
   },
+  managers: ["mgr-01", "mgr-02"],
 };
 
 export function queueItem(overrides: Partial<QueueItem> = {}): QueueItem {

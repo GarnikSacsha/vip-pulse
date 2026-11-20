@@ -88,6 +88,14 @@ def meta(session: SessionDep, provider: Annotated[LLMProvider, Depends(get_provi
             spent_usd=ledger_spent(session) if meter else None,
         ),
         counts=Counts(total=sum(by_status.values()), by_status=by_status, by_priority=by_priority),
+        managers=list(
+            session.scalars(
+                select(PlayerRow.manager_id)
+                .where(PlayerRow.manager_id.is_not(None))
+                .distinct()
+                .order_by(PlayerRow.manager_id)
+            )
+        ),
     )
 
 

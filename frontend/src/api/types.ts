@@ -35,6 +35,7 @@ export interface Meta {
     by_status: Record<TaskStatus, number>;
     by_priority: Record<Priority, number>;
   };
+  managers: string[]; // from players.csv, for the demo role switcher
 }
 
 export interface Player {

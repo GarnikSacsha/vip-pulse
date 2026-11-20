@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import type { WinbackItem, WinbackTier } from "../api/types";
 import { Tag } from "../components/Badges";
 import { ErrorBox, LoadingBlocks } from "../components/Oversight";
+import { managerOf, useRole } from "../lib/role";
 import { useApi } from "../lib/useApi";
 
 const TIERS: { tier: WinbackTier; title: string; hint: string; tone: string }[] = [
@@ -29,7 +30,9 @@ const usd = (n: number | null) => (n === null ? "—" : `$${Math.round(n).toLoca
  */
 export function WinbackPage() {
   const [params, setParams] = useSearchParams();
-  const manager = params.get("manager");
+  // A manager role sees only their own players (demo filter, not authorisation).
+  const roleManager = managerOf(useRole().role);
+  const manager = roleManager ?? params.get("manager");
   const list = useApi(() => api.winback(manager), `winback:${manager ?? ""}`);
 
   return (
@@ -40,7 +43,7 @@ export function WinbackPage() {
           Игроки, которые замолчали или теряют интерес, — список собирается сам из данных игроков и
           дат переписок. Игроки с самоисключением или лимитом сюда не попадают.
         </p>
-        {manager && (
+        {manager && !roleManager && (
           <button
             type="button"
             onClick={() => setParams({})}

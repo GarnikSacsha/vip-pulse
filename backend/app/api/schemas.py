@@ -38,6 +38,7 @@ class Meta(BaseModel):
     as_of: datetime | None  # reference "now" of the dataset; None when nothing is imported
     provider: ProviderInfo
     counts: Counts
+    managers: list[str]  # distinct managers from players.csv, for the demo role switcher
 
 
 class PlayerOut(BaseModel):
