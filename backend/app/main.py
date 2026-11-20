@@ -30,5 +30,5 @@ def create_app(
     app.include_router(queue.router)
     app.include_router(tasks.router)
     app.include_router(overview.router)
-    app.include_router(winback.router)
+    app.include_router(winback.router)  # /api/winback and /api/birthdays
     return app

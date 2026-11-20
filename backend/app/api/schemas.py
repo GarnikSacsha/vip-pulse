@@ -1,6 +1,6 @@
 """Response models of the HTTP API: the contract the browser UI is built against."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -80,6 +80,22 @@ class ReasonOut(BaseModel):
     text: str
 
 
+class OpenRequestOut(BaseModel):
+    """The player's most urgent active conversation: answer it before anything else."""
+
+    conversation_id: str
+    category: Category | None
+    priority: Priority
+    wait_hours: float | None  # None: the manager wrote last
+
+
+class BirthdayOut(BaseModel):
+    player: PlayerOut
+    birthday: date
+    days: int  # from the data date: 0 today, negative = already passed
+    next_action: str
+
+
 class WinbackOut(BaseModel):
     """A player to win back, decided in code (app.policy.winback), never by the model."""
 
@@ -93,6 +109,7 @@ class WinbackOut(BaseModel):
     deposits_prev_30d_usd: float | None
     favorite_game: str | None
     latest_conversation_id: str | None
+    open_request: OpenRequestOut | None = None
 
 
 class QueueItem(BaseModel):

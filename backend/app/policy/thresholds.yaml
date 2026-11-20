@@ -96,6 +96,7 @@ player:
 winback:
   silent_days: 14       # no login for this many days = went silent (urgent)
   no_contact_days: 21   # mention when the last conversation is older than this
+  birthday_window_days: 7  # birthday within ± this many days of the data date = reason to write
 
 # Words that make a message a promotional offer. Offers are never suggested to players with a
 # responsible-gaming signal, and a manager sending one is flagged as a quality issue.

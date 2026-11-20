@@ -276,4 +276,20 @@ export interface WinbackItem {
   deposits_prev_30d_usd: number | null;
   favorite_game: string | null;
   latest_conversation_id: string | null;
+  /** The player's most urgent active conversation: answer it before writing about win-back. */
+  open_request?: OpenRequest | null;
+}
+
+export interface OpenRequest {
+  conversation_id: string;
+  category: Category | null;
+  priority: Priority;
+  wait_hours: number | null;
+}
+
+export interface BirthdayItem {
+  player: Player;
+  birthday: string; // YYYY-MM-DD
+  days: number; // from the data date: 0 today, negative = already passed
+  next_action: string;
 }

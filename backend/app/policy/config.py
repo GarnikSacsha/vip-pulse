@@ -54,6 +54,7 @@ class PlayerConfig(_Cfg):
 class WinbackConfig(_Cfg):
     silent_days: int = Field(default=14, ge=1)  # no login this long = went silent
     no_contact_days: int = Field(default=21, ge=1)  # last conversation this long ago
+    birthday_window_days: int = Field(default=7, ge=0, le=31)  # ± days from the data date
 
 
 class PolicyConfig(_Cfg):

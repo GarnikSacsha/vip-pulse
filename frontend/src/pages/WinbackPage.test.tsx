@@ -75,3 +75,34 @@ describe("win-back page", () => {
     expect(calls).toContain("/api/winback?manager=mgr-01");
   });
 });
+
+describe("win-back page: birthdays and open requests", () => {
+  it("lists birthdays near the data date as a reason to write, without promo", async () => {
+    const birthdays = [
+      { player: { player_id: "p-050", display_name: null, manager_id: "mgr-01", segment: "VIP" }, birthday: "1990-11-14", days: 2, next_action: "Поздравить лично, без бонуса и промо." },
+      { player: { player_id: "p-051", display_name: null, manager_id: "mgr-01", segment: "VIP" }, birthday: "1985-11-09", days: -3, next_action: "Поздравить лично, без бонуса и промо." },
+    ];
+    const calls = serveApi(vi, { "/api/meta": meta, "/api/winback": [], "/api/birthdays": birthdays });
+    renderAt("/winback?manager=mgr-01");
+    const block = await screen.findByRole("region", { name: /Повод написать: день рождения/ });
+    const rows = within(block).getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("p-050");
+    expect(rows[0]).toHaveTextContent("через 2 дн.");
+    expect(rows[1]).toHaveTextContent("3 дн. назад");
+    expect(block).toHaveTextContent("Поздравить лично, без бонуса и промо.");
+    expect(calls).toContain("/api/birthdays?manager=mgr-01");
+  });
+
+  it("sends the manager to the open request before any win-back message", async () => {
+    const waiting = item({
+      next_action: "Сначала закрыть открытый запрос игрока в очереди, потом писать про возвращение.",
+      open_request: { conversation_id: "d-020", category: "withdrawal", priority: "P0", wait_hours: 50 },
+    });
+    serveApi(vi, { "/api/meta": meta, "/api/winback": [waiting], "/api/birthdays": [] });
+    renderAt("/winback");
+    const urgent = await screen.findByRole("region", { name: /Вернуть срочно/ });
+    const link = within(urgent).getByRole("link", { name: /Сначала закрой открытый запрос: Вывод средств, ждёт 2 д 2 ч/ });
+    expect(link).toHaveAttribute("href", "/queue/d-020");
+    expect(urgent).not.toHaveTextContent("другое казино");
+  });
+});
