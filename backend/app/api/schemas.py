@@ -41,6 +41,29 @@ class Meta(BaseModel):
     managers: list[str]  # distinct managers from players.csv, for the demo role switcher
 
 
+class PlayerProfile(BaseModel):
+    """Profile columns of players.csv for the player card. Missing or unreadable = None."""
+
+    account_status: str | None = None  # active | limit_set | self_excluded
+    brand: str | None = None
+    language: str | None = None
+    geo: str | None = None
+    deposits_30d_usd: float | None = None
+    deposits_30d_count: int | None = None
+    deposits_prev_30d_usd: float | None = None
+    deposits_prev_30d_count: int | None = None
+    last_deposit_at: str | None = None
+    failed_deposits_7d: int | None = None
+    withdrawals_30d_usd: float | None = None
+    last_withdrawal_at: str | None = None
+    pending_withdrawal_usd: float | None = None
+    bonuses_30d_usd: float | None = None
+    bonuses_30d_count: int | None = None
+    last_login_at: str | None = None
+    birthday: str | None = None
+    favorite_game: str | None = None
+
+
 class PlayerOut(BaseModel):
     player_id: str
     display_name: str | None
@@ -49,6 +72,7 @@ class PlayerOut(BaseModel):
     # Optional profile columns; an adapter maps its source columns to these names.
     country: str | None = None
     registered_at: str | None = None
+    profile: PlayerProfile = PlayerProfile()
 
 
 class ReasonOut(BaseModel):

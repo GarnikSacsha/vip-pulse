@@ -72,6 +72,8 @@ def test_queue_is_sorted_by_priority_then_wait(client: TestClient) -> None:
     assert [i["conversation_id"] for i in items[:3]] == ["d-001", "d-009", "d-004"]
     assert [i["priority"] for i in items] == sorted(i["priority"] for i in items)
     first = items[0]
+    profile = first["player"].pop("profile")
+    assert profile["account_status"] is None  # the sample format has no such column
     assert first["player"] == {
         "player_id": "p-001",
         "display_name": "Demo Player 001",

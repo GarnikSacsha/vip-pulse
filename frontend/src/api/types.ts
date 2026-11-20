@@ -45,6 +45,29 @@ export interface Player {
   segment: string | null;
   country?: string | null;
   registered_at?: string | null;
+  profile?: PlayerProfile; // always sent by the API; optional for hand-made test data
+}
+
+/** Profile columns of players.csv. null = not in the source or unreadable. */
+export interface PlayerProfile {
+  account_status: string | null; // active | limit_set | self_excluded
+  brand: string | null;
+  language: string | null;
+  geo: string | null;
+  deposits_30d_usd: number | null;
+  deposits_30d_count: number | null;
+  deposits_prev_30d_usd: number | null;
+  deposits_prev_30d_count: number | null;
+  last_deposit_at: string | null;
+  failed_deposits_7d: number | null;
+  withdrawals_30d_usd: number | null;
+  last_withdrawal_at: string | null;
+  pending_withdrawal_usd: number | null;
+  bonuses_30d_usd: number | null;
+  bonuses_30d_count: number | null;
+  last_login_at: string | null;
+  birthday: string | null;
+  favorite_game: string | null;
 }
 
 export interface Reason {

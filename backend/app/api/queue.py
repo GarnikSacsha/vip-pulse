@@ -18,6 +18,7 @@ from app.api.schemas import (
     MessageOut,
     Meta,
     PlayerOut,
+    PlayerProfile,
     ProviderInfo,
     QueueItem,
     ReasonOut,
@@ -55,7 +56,33 @@ def _player(row: PlayerRow) -> PlayerOut:
         segment=row.segment,
         country=row.attributes.get("country") if row.attributes else None,
         registered_at=row.attributes.get("registered_at") if row.attributes else None,
+        profile=_profile(row.attributes or {}),
     )
+
+
+def _profile(attrs: dict[str, Any]) -> PlayerProfile:
+    """Typed profile from the attributes an adapter kept. A value that does not parse is None."""
+    values: dict[str, Any] = {}
+    for name, field in PlayerProfile.model_fields.items():
+        raw = attrs.get(name)
+        text = str(raw).strip() if raw is not None else ""
+        if not text:
+            continue
+        if field.annotation == float | None:
+            values[name] = _to_number(text)
+        elif field.annotation == int | None:
+            number = _to_number(text)
+            values[name] = int(number) if number is not None and number.is_integer() else None
+        else:
+            values[name] = text
+    return PlayerProfile(**values)
+
+
+def _to_number(text: str) -> float | None:
+    try:
+        return float(text.replace(" ", "").replace(",", "."))
+    except ValueError:
+        return None
 
 
 def _result(analysis: AnalysisRow | None) -> dict[str, Any]:

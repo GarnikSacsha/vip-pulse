@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode, useId } from "react";
 import { NavLink } from "react-router";
 import { api } from "../api/client";
 import type { Player, QueueItem, Sentiment } from "../api/types";
@@ -12,6 +13,112 @@ const W = 168;
 const H = 40;
 const PAD = 6;
 
+const ACCOUNT_STATUS: Record<string, string> = {
+  active: "Активен",
+  limit_set: "Установлен лимит",
+  self_excluded: "Самоисключение",
+};
+
+const RESTRICTION_NOTE: Record<string, string> = {
+  self_excluded: "Самоисключение: никаких бонусов, акций и уговоров вернуться. Только сервисные вопросы.",
+  limit_set: "Установлен лимит: не предлагать бонусы и повышение лимита.",
+};
+
+const dash = "—";
+const usd = (n: number | null) => (n === null ? dash : `$${Math.round(n).toLocaleString("ru-RU").replace(/\s/g, " ")}`);
+const day = (s: string | null) => (s ? formatDay(s) : dash);
+function amount(sum: number | null, count: number | null): string {
+  if (sum === null && count === null) return dash;
+  return count === null ? usd(sum) : `${usd(sum)} · ${count} шт.`;
+}
+
+function Group({ title, rows }: { title: string; rows: [string, ReactNode][] }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id}>
+      <h3 id={id} className="text-xs font-medium uppercase tracking-wide text-muted">
+        {title}
+      </h3>
+      <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        {rows.map(([term, value]) => (
+          <Fragment key={term}>
+            <dt className="text-muted">{term}</dt>
+            <dd className="tabular-nums">{value}</dd>
+          </Fragment>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+/** Every column of players.csv the adapter kept, in groups. Missing values show as a dash. */
+function PlayerCard({ player }: { player: Player }) {
+  const p = player.profile;
+  const status = p?.account_status ?? null;
+  const pending = p?.pending_withdrawal_usd ?? null;
+  return (
+    <section className="space-y-4 rounded-lg bg-surface p-4 ring-1 ring-line">
+      {status && RESTRICTION_NOTE[status] && (
+        <p role="note" className="rounded-md border border-danger-line bg-danger-soft px-3 py-2 text-sm text-danger">
+          {RESTRICTION_NOTE[status]}
+        </p>
+      )}
+      <Group
+        title="Аккаунт"
+        rows={[
+          ["Игрок", <span className="font-mono text-xs">{player.player_id}</span>],
+          [
+            "Статус",
+            status ? (
+              <span className={RESTRICTION_NOTE[status] ? "font-medium text-danger" : ""}>
+                {ACCOUNT_STATUS[status] ?? status}
+              </span>
+            ) : (
+              dash
+            ),
+          ],
+          ["Сегмент", player.segment ?? dash],
+          ["Менеджер", player.manager_id ?? "не закреплён"],
+          ["Бренд", p?.brand ?? dash],
+          ["Язык", p?.language ?? dash],
+          ["Гео", p?.geo ?? player.country ?? dash],
+          ["VIP с", day(player.registered_at ?? null)],
+        ]}
+      />
+      <Group
+        title="Деньги"
+        rows={[
+          ["Депозиты 30 дн.", amount(p?.deposits_30d_usd ?? null, p?.deposits_30d_count ?? null)],
+          ["Пред. 30 дн.", amount(p?.deposits_prev_30d_usd ?? null, p?.deposits_prev_30d_count ?? null)],
+          ["Последний депозит", day(p?.last_deposit_at ?? null)],
+          ["Неудачные депозиты 7 дн.", p?.failed_deposits_7d ?? dash],
+          ["Выводы 30 дн.", usd(p?.withdrawals_30d_usd ?? null)],
+          ["Последний вывод", day(p?.last_withdrawal_at ?? null)],
+          [
+            "Вывод в ожидании",
+            pending ? (
+              <span data-alert="true" className="font-medium text-danger">
+                {usd(pending)}
+              </span>
+            ) : (
+              usd(pending)
+            ),
+          ],
+          ["Бонусы 30 дн.", amount(p?.bonuses_30d_usd ?? null, p?.bonuses_30d_count ?? null)],
+        ]}
+      />
+      <Group title="Активность" rows={[["Последний вход", day(p?.last_login_at ?? null)]]} />
+      <Group
+        title="Личное"
+        rows={[
+          ["День рождения", day(p?.birthday ?? null)],
+          ["Любимая игра", p?.favorite_game ?? dash],
+        ]}
+      />
+    </section>
+  );
+}
+
 /** Player context for the manager: profile, tone across conversations, every conversation. */
 export function Dossier({ player, currentId, search = "" }: { player: Player; currentId: string; search?: string }) {
   const history = useApi(() => api.queue({ player: [player.player_id] }), `dossier:${player.player_id}`);
@@ -19,20 +126,7 @@ export function Dossier({ player, currentId, search = "" }: { player: Player; cu
 
   return (
     <div className="space-y-4">
-      <section className="rounded-lg bg-surface p-4 ring-1 ring-line">
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-          <dt className="text-muted">Игрок</dt>
-          <dd className="font-mono text-xs leading-5">{player.player_id}</dd>
-          <dt className="text-muted">Сегмент</dt>
-          <dd>{player.segment ?? "—"}</dd>
-          <dt className="text-muted">Страна</dt>
-          <dd>{player.country ?? "—"}</dd>
-          <dt className="text-muted">С нами с</dt>
-          <dd>{player.registered_at ? formatDay(player.registered_at) : "—"}</dd>
-          <dt className="text-muted">Менеджер</dt>
-          <dd>{player.manager_id ?? "не закреплён"}</dd>
-        </dl>
-      </section>
+      <PlayerCard player={player} />
 
       {history.error ? (
         <p role="alert" className="text-sm text-danger">
