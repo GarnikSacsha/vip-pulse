@@ -80,9 +80,11 @@ describe("conversation page", () => {
     expect(items).toHaveLength(3);
     expect(items[0]).toHaveTextContent("Игрок");
     expect(items[0]).toHaveTextContent("Вывел 5000€, до сих пор не пришло.");
-    expect(items[0]).toHaveTextContent("Основание вывода");
+    expect(items[0]).toHaveTextContent("Цитата для разбора");
     expect(items[1]).toHaveTextContent("Менеджер");
-    expect(items[1]).not.toHaveTextContent("Основание вывода");
+    expect(items[1]).not.toHaveTextContent("Цитата для разбора");
+    // «вывод» reads as a payout in iGaming: the old label must not come back.
+    expect(document.body).not.toHaveTextContent("Основание вывода");
     expect(items[2]).toHaveTextContent("Ждёт ответа");
   });
 

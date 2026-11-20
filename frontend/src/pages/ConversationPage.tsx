@@ -211,7 +211,7 @@ function Conversation({
             ))}
           </ul>
           <p className="mx-auto mt-5 max-w-2xl text-xs text-muted">
-            Номера в кружках — сообщения, на которые ссылается разбор. Наведите на номер справа, чтобы найти
+            Номера в кружках и метка «Цитата для разбора» — сообщения, на которые ссылается разбор. Наведите на номер справа, чтобы найти
             сообщение. Время — UTC.
           </p>
         </div>
@@ -317,7 +317,7 @@ function MessageBubble({ message, highlight }: { message: MessageOut; highlight:
           {n !== undefined && <RefNumber n={n} active={lit} />}
           <span className="font-medium text-ink">{SENDER_LABEL[message.sender_role]}</span>
           <span className="tabular-nums">{formatShort(message.sent_at)}</span>
-          {message.is_evidence && <Tag tone="accent">Основание вывода</Tag>}
+          {message.is_evidence && <Tag tone="accent">Цитата для разбора</Tag>}
           {message.is_pending && <Tag tone="warn">Ждёт ответа</Tag>}
         </p>
         <p className="whitespace-pre-line leading-relaxed">{message.text}</p>
