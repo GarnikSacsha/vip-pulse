@@ -33,6 +33,7 @@ export function queueItem(overrides: Partial<QueueItem> = {}): QueueItem {
     requires_review: false,
     quality_flags: [],
     manager_errors: [],
+    rule_errors: [],
     alerts: [],
     reasons: [{ code: "sla.money_critical", text: "Финансовый запрос без ответа 27 ч (порог эскалации финансового запроса: 24 ч)" }],
     last_message_at: "2026-11-11T10:00:00Z",

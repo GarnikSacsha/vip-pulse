@@ -74,6 +74,11 @@ def load_players(session: Session) -> list[Player]:
     ]
 
 
+def to_domain(r: ConversationRow) -> Conversation:
+    """A stored conversation as the domain model (messages must be loaded)."""
+    return _to_domain(r)
+
+
 def _to_domain(r: ConversationRow) -> Conversation:
     return Conversation(
         conversation_id=r.conversation_id,

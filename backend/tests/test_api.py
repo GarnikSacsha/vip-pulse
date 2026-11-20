@@ -263,7 +263,7 @@ def test_overview_workload_by_manager(client: TestClient) -> None:
             "critical": 1,
             "overdue": 1,
             "oldest_wait_hours": 27.0,
-            "errors": 2,
+            "errors": 3,  # + d-001 waiting past the SLA (rule, 0019)
         },
         {
             "manager_id": "mgr-02",

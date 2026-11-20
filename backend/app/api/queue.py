@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.analysis.llm import LLMProvider
 from app.analysis.llm.budget import meter_of
@@ -22,16 +22,18 @@ from app.api.schemas import (
     ProviderInfo,
     QueueItem,
     ReasonOut,
+    RuleErrorOut,
 )
 from app.api.tasks import alerts_of
 from app.api.tasks import task_out as to_task_out
-from app.ingestion.store import load_conversation
+from app.ingestion.store import load_conversation, to_domain
 from app.models import AnalysisRow, ConversationRow, PlayerRow, TaskRow
 from app.policy.config import PolicyConfig
-from app.policy.facts import compute_facts
+from app.policy.facts import compute_facts, late_replies
 from app.policy.priority import LABEL_MODEL, LABEL_SIMULATED, Route
 from app.policy.sla import ReplyState, reply_state, sla_lane
 from app.schemas.analysis import ManagerError, Priority, ProcessingStatus
+from app.schemas.domain import Conversation, SenderRole
 from app.tasks.service import TaskStatus, ledger_spent
 
 router = APIRouter(prefix="/api", tags=["queue"])
@@ -183,6 +185,36 @@ def _manager_errors(result: dict[str, Any]) -> list[ManagerError]:
     return [ManagerError.model_validate(e) for e in result.get("manager_errors") or []]
 
 
+def _rule_errors(
+    conv: Conversation, task: TaskRow, late: bool, policy: PolicyConfig
+) -> list[RuleErrorOut]:
+    """Mistakes code counts: late answers in the history, and a player waiting past the SLA now."""
+    found = [
+        RuleErrorOut(
+            code="late_reply",
+            evidence_message_ids=[r.player_message_id, r.manager_message_id],
+            hours=r.hours,
+        )
+        for r in late_replies(conv, policy.sla)
+    ]
+    if late:
+        human = [m for m in conv.messages if m.sender_role != SenderRole.SYSTEM]
+        pending = []
+        for m in reversed(human):
+            if m.sender_role != SenderRole.PLAYER:
+                break
+            pending.append(m.message_id)
+        if pending:
+            found.append(
+                RuleErrorOut(
+                    code="waiting_past_sla",
+                    evidence_message_ids=[pending[-1]],
+                    hours=round(task.wait_hours or 0.0, 1),
+                )
+            )
+    return found
+
+
 def list_queue(
     session: Session,
     *,
@@ -201,6 +233,7 @@ def list_queue(
         .join(ConversationRow, ConversationRow.conversation_id == TaskRow.conversation_id)
         .join(PlayerRow, PlayerRow.player_id == ConversationRow.player_id)
         .outerjoin(AnalysisRow, AnalysisRow.id == TaskRow.analysis_id)
+        .options(selectinload(ConversationRow.messages))
     )
     if status:
         query = query.where(TaskRow.status.in_([s.value for s in status]))
@@ -260,6 +293,7 @@ def list_queue(
                 requires_review=task.requires_review,
                 quality_flags=task.quality_flags,
                 manager_errors=_manager_errors(result),
+                rule_errors=_rule_errors(to_domain(conv), task, late, policy),
                 reasons=[ReasonOut(**r) for r in task.reasons],
                 last_message_at=conv.last_message_at,
                 simulated=bool(analysis and analysis.simulated),

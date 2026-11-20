@@ -5,7 +5,7 @@ import { Tag } from "../components/Badges";
 import { CompactItem, ErrorBox, KpiList, LoadingBlocks, Panel } from "../components/Oversight";
 import { Pulse } from "../components/Pulse";
 import { formatWait } from "../lib/format";
-import { CATEGORY_LABEL, MANAGER_ERROR_LABEL, SLA_LANE_LABEL, qualityFlagLabel } from "../lib/labels";
+import { CATEGORY_LABEL, MANAGER_ERROR_LABEL, RULE_ERROR_LABEL, SLA_LANE_LABEL, qualityFlagLabel } from "../lib/labels";
 import { useApi } from "../lib/useApi";
 
 interface Group {
@@ -116,7 +116,14 @@ function mistakesOf(item: QueueItem): Mistake[] {
     item,
     messageId: e.evidence_message_ids[0] ?? null,
   }));
-  return [...byCode, ...byAnalysis];
+  const byTiming: Mistake[] = item.rule_errors.map((e, i) => ({
+    key: `${item.task_id}:${e.code}:${i}`,
+    label: `${RULE_ERROR_LABEL[e.code] ?? e.code}: ${formatWait(e.hours)}`,
+    source: "code",
+    item,
+    messageId: e.evidence_message_ids[0] ?? null,
+  }));
+  return [...byCode, ...byTiming, ...byAnalysis];
 }
 
 /** Manager mistakes by manager: the bonus rule (code) and what the analysis found in the text. */
@@ -160,6 +167,7 @@ function ManagerMistakes({ items }: { items: QueueItem[] }) {
                       <li key={m.key} className="text-sm">
                         <Link to={to} className="hover:underline">
                           <span className={m.source === "code" ? "text-danger" : ""}>{m.label}</span>
+                          {m.source === "code" && <span className="text-xs text-muted"> (посчитано кодом)</span>}
                           <span className="text-muted"> · {name}</span>
                         </Link>
                         {m.item.simulated && (

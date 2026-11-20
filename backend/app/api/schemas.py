@@ -112,6 +112,14 @@ class WinbackOut(BaseModel):
     open_request: OpenRequestOut | None = None
 
 
+class RuleErrorOut(BaseModel):
+    """A manager mistake counted by code from message times (decision 0019), not by the model."""
+
+    code: str  # late_reply | waiting_past_sla
+    evidence_message_ids: list[str]  # the player message answered late (or still waiting) first
+    hours: float
+
+
 class QueueItem(BaseModel):
     task_id: int
     conversation_id: str
@@ -136,6 +144,7 @@ class QueueItem(BaseModel):
     requires_review: bool
     quality_flags: list[str]  # mistakes counted by code, e.g. a bonus to a vulnerable player
     manager_errors: list[ManagerError]  # mistakes found by the analysis, with evidence
+    rule_errors: list[RuleErrorOut]  # mistakes counted by code from message times
     reasons: list[ReasonOut]
     last_message_at: datetime
     simulated: bool

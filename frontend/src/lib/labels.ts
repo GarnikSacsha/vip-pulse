@@ -96,6 +96,12 @@ export const MANAGER_ERROR_LABEL: Record<ManagerErrorCode, string> = {
   retention_pressure: "Давление: играть дальше или не выводить",
 };
 
+/** Manager mistakes counted by code from message times (decision 0019). */
+export const RULE_ERROR_LABEL: Record<string, string> = {
+  late_reply: "Ответ позже SLA канала",
+  waiting_past_sla: "Игрок ждёт дольше SLA",
+};
+
 export function qualityFlagLabel(flag: string): string {
   return QUALITY_FLAG_LABEL[flag] ?? flag;
 }

@@ -92,6 +92,13 @@ export interface ManagerError {
   evidence_message_ids: string[]; // manager messages that show the mistake
 }
 
+/** A manager mistake counted by code (late_reply | waiting_past_sla), not by the model. */
+export interface RuleError {
+  code: string;
+  evidence_message_ids: string[]; // the player message answered late (or still waiting) first
+  hours: number;
+}
+
 export interface QueueItem {
   task_id: number;
   conversation_id: string;
@@ -116,6 +123,7 @@ export interface QueueItem {
   requires_review: boolean;
   quality_flags: string[]; // counted by code
   manager_errors: ManagerError[]; // found by the analysis
+  rule_errors: RuleError[]; // counted by code from message times
   /** Personal-contact alerts from the policy, e.g. "multi_account". */
   alerts: string[];
   reasons: Reason[];

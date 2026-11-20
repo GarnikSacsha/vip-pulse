@@ -209,3 +209,26 @@ describe("team lead page: overdue means the «Горит» lane", () => {
     expect(tiles.getByText("Просрочен ответ").closest("li")).toHaveTextContent("колонка «Горит», без эскалаций");
   });
 });
+
+describe("team lead page: mistakes counted by code", () => {
+  it("lists late replies and current SLA breaches with a link to the player's message", async () => {
+    const item = queueItem({
+      task_id: 41,
+      conversation_id: "d-001",
+      rule_errors: [
+        { code: "late_reply", evidence_message_ids: ["m-001-1", "m-001-2"], hours: 5 },
+        { code: "waiting_past_sla", evidence_message_ids: ["m-001-3"], hours: 27 },
+      ],
+    });
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [item] });
+    renderLead();
+    const mine = within(await screen.findByRole("region", { name: /Ошибки менеджеров/ })).getByRole("list", { name: "mgr-01" });
+    const late = within(mine).getByRole("link", { name: /Ответ позже SLA канала: 5 ч/ });
+    expect(late).toHaveAttribute("href", "/queue/d-001?msg=m-001-1");
+    expect(late).toHaveTextContent("посчитано кодом");
+    expect(within(mine).getByRole("link", { name: /Игрок ждёт дольше SLA: 1 д 3 ч/ })).toHaveAttribute(
+      "href",
+      "/queue/d-001?msg=m-001-3",
+    );
+  });
+});
