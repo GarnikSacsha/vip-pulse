@@ -6,7 +6,9 @@ export type Route = "manager" | "rg_specialist" | "security";
 export type Channel = "telegram" | "whatsapp" | "email" | "other";
 export type SenderRole = "player" | "manager" | "system";
 /** Mirrors backend/app/policy/sla.py: decided by thresholds, never by the model. */
-export type SlaLane = "breached" | "at_risk" | "waiting" | "ok";
+export type SlaLane = "breached" | "at_risk" | "waiting" | "specialist" | "ok";
+/** Who owes the next message: the one source for every wait and overdue number (decision 0017). */
+export type ReplyState = "players_turn" | "no_reply_needed" | "manager" | "specialist";
 export type Sentiment = "positive" | "neutral" | "negative" | "mixed";
 export type Category =
   | "withdrawal"
@@ -35,6 +37,7 @@ export interface Meta {
     by_status: Record<TaskStatus, number>;
     by_priority: Record<Priority, number>;
   };
+  managers: string[]; // from players.csv, for the demo role switcher
 }
 
 export interface Player {
@@ -44,11 +47,58 @@ export interface Player {
   segment: string | null;
   country?: string | null;
   registered_at?: string | null;
+  profile?: PlayerProfile; // always sent by the API; optional for hand-made test data
+}
+
+/** Profile columns of players.csv. null = not in the source or unreadable. */
+export interface PlayerProfile {
+  account_status: string | null; // active | limit_set | self_excluded
+  brand: string | null;
+  language: string | null;
+  geo: string | null;
+  deposits_30d_usd: number | null;
+  deposits_30d_count: number | null;
+  deposits_prev_30d_usd: number | null;
+  deposits_prev_30d_count: number | null;
+  last_deposit_at: string | null;
+  failed_deposits_7d: number | null;
+  withdrawals_30d_usd: number | null;
+  last_withdrawal_at: string | null;
+  pending_withdrawal_usd: number | null;
+  bonuses_30d_usd: number | null;
+  bonuses_30d_count: number | null;
+  last_login_at: string | null;
+  birthday: string | null;
+  favorite_game: string | null;
+  deposits_change_pct?: number | null; // derived: 30-day deposits against the 30 days before
+  deposit_drop?: boolean | null; // fell below player.deposit_drop_share (thresholds.yaml)
 }
 
 export interface Reason {
   code: string;
   text: string;
+}
+
+/** Mistakes in how a manager handled a contact, found by the analysis (closed list). */
+export type ManagerErrorCode =
+  | "canned_reply"
+  | "rude_tone"
+  | "wrong_info"
+  | "incomplete_answer"
+  | "wrong_name"
+  | "broken_promise"
+  | "retention_pressure";
+
+export interface ManagerError {
+  code: ManagerErrorCode;
+  evidence_message_ids: string[]; // manager messages that show the mistake
+}
+
+/** A manager mistake counted by code (late_reply | waiting_past_sla), not by the model. */
+export interface RuleError {
+  code: string;
+  evidence_message_ids: string[]; // the player message answered late (or still waiting) first
+  hours: number | null; // null when time is not the point (offer_before_security_check)
 }
 
 export interface QueueItem {
@@ -64,15 +114,18 @@ export interface QueueItem {
   summary: string | null;
   next_action: string | null;
   wait_hours: number | null;
-  awaiting_reply: boolean;
-  /** Active work whose player waits longer than the channel's SLA. */
+  awaiting_reply: boolean; // the manager or a specialist owes a reply
+  reply_state: ReplyState;
+  /** Active work where the manager owes a reply past the channel's SLA (lane «Горит»). */
   overdue: boolean;
   /** The channel's response SLA under the current thresholds. */
   sla_hours: number;
   /** "breached" exactly when overdue. */
   sla_lane: SlaLane;
   requires_review: boolean;
-  quality_flags: string[];
+  quality_flags: string[]; // counted by code
+  manager_errors: ManagerError[]; // found by the analysis
+  rule_errors: RuleError[]; // counted by code from message times
   /** Personal-contact alerts from the policy, e.g. "multi_account". */
   alerts: string[];
   reasons: Reason[];
@@ -98,6 +151,7 @@ export interface AnalysisOut {
   confidence: number | null;
   safety_flag: "none" | "responsible_gaming" | "fraud_security" | null;
   needs_escalation: boolean | null;
+  manager_errors: ManagerError[];
   model: string | null;
   simulated: boolean;
   label: string;
@@ -133,6 +187,8 @@ export interface ConversationDetail {
     wait_hours: number | null;
     response_sla_hours: number;
     sla_breached: boolean;
+    reply_state: ReplyState | null;
+    raw_wait_hours: number | null; // since the player's last message, whoever owes
     median_response_minutes: number | null;
   };
 }
@@ -179,6 +235,8 @@ export interface ManagerLoad {
   critical: number;
   overdue: number;
   oldest_wait_hours: number | null;
+  errors: number; // code flags + analysis findings, all conversations
+  error_conversations: number; // conversations with at least one mistake
 }
 
 export interface CategoryCount {
@@ -234,4 +292,20 @@ export interface WinbackItem {
   deposits_prev_30d_usd: number | null;
   favorite_game: string | null;
   latest_conversation_id: string | null;
+  /** The player's most urgent active conversation: answer it before writing about win-back. */
+  open_request?: OpenRequest | null;
+}
+
+export interface OpenRequest {
+  conversation_id: string;
+  category: Category | null;
+  priority: Priority;
+  wait_hours: number | null;
+}
+
+export interface BirthdayItem {
+  player: Player;
+  birthday: string; // YYYY-MM-DD
+  days: number; // from the data date: 0 today, negative = already passed
+  next_action: string;
 }

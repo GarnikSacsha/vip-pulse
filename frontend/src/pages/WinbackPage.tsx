@@ -1,8 +1,11 @@
 import { Link, useSearchParams } from "react-router";
 import { api } from "../api/client";
-import type { WinbackItem, WinbackTier } from "../api/types";
+import type { BirthdayItem, WinbackItem, WinbackTier } from "../api/types";
 import { Tag } from "../components/Badges";
 import { ErrorBox, LoadingBlocks } from "../components/Oversight";
+import { formatDay, formatWait } from "../lib/format";
+import { CATEGORY_LABEL } from "../lib/labels";
+import { managerOf, useRole } from "../lib/role";
 import { useApi } from "../lib/useApi";
 
 const TIERS: { tier: WinbackTier; title: string; hint: string; tone: string }[] = [
@@ -29,8 +32,11 @@ const usd = (n: number | null) => (n === null ? "—" : `$${Math.round(n).toLoca
  */
 export function WinbackPage() {
   const [params, setParams] = useSearchParams();
-  const manager = params.get("manager");
+  // A manager role sees only their own players (demo filter, not authorisation).
+  const roleManager = managerOf(useRole().role);
+  const manager = roleManager ?? params.get("manager");
   const list = useApi(() => api.winback(manager), `winback:${manager ?? ""}`);
+  const birthdays = useApi(() => api.birthdays(manager), `birthdays:${manager ?? ""}`);
 
   return (
     <section className="space-y-6">
@@ -40,7 +46,7 @@ export function WinbackPage() {
           Игроки, которые замолчали или теряют интерес, — список собирается сам из данных игроков и
           дат переписок. Игроки с самоисключением или лимитом сюда не попадают.
         </p>
-        {manager && (
+        {manager && !roleManager && (
           <button
             type="button"
             onClick={() => setParams({})}
@@ -52,6 +58,8 @@ export function WinbackPage() {
           </button>
         )}
       </div>
+
+      <Birthdays items={birthdays.data} error={birthdays.error} />
 
       {list.error ? (
         <ErrorBox message={`Не удалось загрузить список: ${list.error}`} onRetry={list.reload} />
@@ -97,6 +105,38 @@ export function WinbackPage() {
   );
 }
 
+function when(days: number): string {
+  if (days === 0) return "сегодня";
+  return days > 0 ? `через ${days} дн.` : `${-days} дн. назад`;
+}
+
+/** Birthdays within ± the window of the data date (thresholds.yaml). Restricted accounts excluded. */
+function Birthdays({ items, error }: { items: BirthdayItem[] | null; error: string | null }) {
+  if (error) return <p className="text-sm text-muted">Дни рождения не загрузились: {error}</p>;
+  if (!items || items.length === 0) return null;
+  return (
+    <section aria-labelledby="birthdays" className="rounded-lg bg-surface p-4 ring-1 ring-line">
+      <h2 id="birthdays" className="text-sm font-semibold">
+        Повод написать: день рождения <span className="font-normal tabular-nums text-muted">· {items.length}</span>
+      </h2>
+      <p className="text-xs text-muted">{items[0]?.next_action} Окно считается от даты среза данных.</p>
+      <ul className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((b) => (
+          <li key={b.player.player_id} className="flex min-w-0 justify-between gap-3">
+            <span className="truncate">
+              {b.player.display_name ?? b.player.player_id}
+              <span className="text-muted"> · {b.player.manager_id ?? "без менеджера"}</span>
+            </span>
+            <span className={`shrink-0 tabular-nums ${b.days === 0 ? "font-medium text-accent" : "text-muted"}`}>
+              {formatDay(b.birthday).replace(/ \d{4}$/, "")} · {when(b.days)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function WinbackCard({ item }: { item: WinbackItem }) {
   const name = item.player.display_name ?? item.player.player_id;
   return (
@@ -135,7 +175,19 @@ function WinbackCard({ item }: { item: WinbackItem }) {
         </dd>
       </dl>
 
-      <p className="mt-2 rounded bg-canvas px-2 py-1.5 text-xs leading-relaxed">{item.next_action}</p>
+      {item.open_request ? (
+        <Link
+          to={`/queue/${encodeURIComponent(item.open_request.conversation_id)}`}
+          className="mt-2 block rounded border border-danger-line bg-danger-soft px-2 py-1.5 text-xs font-medium leading-relaxed text-danger hover:underline"
+        >
+          {`Сначала закрой открытый запрос: ${
+            item.open_request.category ? CATEGORY_LABEL[item.open_request.category] : "без разбора"
+          }${item.open_request.wait_hours !== null ? `, ждёт ${formatWait(item.open_request.wait_hours)}` : ""}`}{" "}
+          →
+        </Link>
+      ) : (
+        <p className="mt-2 rounded bg-canvas px-2 py-1.5 text-xs leading-relaxed">{item.next_action}</p>
+      )}
       {item.latest_conversation_id && (
         <Link
           to={`/queue/${encodeURIComponent(item.latest_conversation_id)}`}

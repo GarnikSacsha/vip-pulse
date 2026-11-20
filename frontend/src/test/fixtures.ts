@@ -8,6 +8,7 @@ export const meta: Meta = {
     by_status: { open: 5, in_progress: 1, resolved: 1, no_action: 2 },
     by_priority: { P0: 3, P1: 1, P2: 1, P3: 4 },
   },
+  managers: ["mgr-01", "mgr-02"],
 };
 
 export function queueItem(overrides: Partial<QueueItem> = {}): QueueItem {
@@ -25,13 +26,16 @@ export function queueItem(overrides: Partial<QueueItem> = {}): QueueItem {
     next_action: "Проверить статус вывода и сообщить срок.",
     wait_hours: 27,
     awaiting_reply: true,
+    reply_state: "manager",
     overdue: true,
     sla_hours: 4,
     sla_lane: "breached",
     requires_review: false,
     quality_flags: [],
+    manager_errors: [],
+    rule_errors: [],
     alerts: [],
-    reasons: [{ code: "sla.money_critical", text: "Финансовый запрос без ответа 27 ч (порог 24 ч)" }],
+    reasons: [{ code: "sla.money_critical", text: "Финансовый запрос без ответа 27 ч (порог эскалации финансового запроса: 24 ч)" }],
     last_message_at: "2026-11-11T10:00:00Z",
     simulated: true,
     ...overrides,
@@ -55,8 +59,8 @@ export const overview: Overview = {
     no_action: 4,
   },
   managers: [
-    { manager_id: "mgr-01", total: 5, active: 3, in_progress: 0, critical: 1, overdue: 1, oldest_wait_hours: 27 },
-    { manager_id: "mgr-02", total: 4, active: 2, in_progress: 0, critical: 2, overdue: 0, oldest_wait_hours: 5.75 },
+    { manager_id: "mgr-01", total: 5, active: 3, in_progress: 0, critical: 1, overdue: 1, oldest_wait_hours: 27, errors: 2, error_conversations: 1 },
+    { manager_id: "mgr-02", total: 4, active: 2, in_progress: 0, critical: 2, overdue: 0, oldest_wait_hours: 5.75, errors: 1, error_conversations: 1 },
   ],
   categories: [
     { category: "withdrawal", total: 1, active: 1 },
@@ -137,6 +141,7 @@ export function conversation(overrides: Partial<ConversationDetail> = {}): Conve
       confidence: 0.55,
       safety_flag: "none",
       needs_escalation: true,
+      manager_errors: [],
       model: "fake:heuristic-v1",
       simulated: true,
       label: "эвристика fake, без модели",
@@ -149,7 +154,7 @@ export function conversation(overrides: Partial<ConversationDetail> = {}): Conve
       route: "manager",
       next_action: "Проверить статус вывода у платёжной команды и сообщить игроку срок.",
       reasons: [
-        { code: "sla.money_critical", text: "Финансовый запрос без ответа 27 ч (порог 24 ч)" },
+        { code: "sla.money_critical", text: "Финансовый запрос без ответа 27 ч (порог эскалации финансового запроса: 24 ч)" },
         { code: "analysis.escalation", text: "Рекомендована эскалация (эвристика fake, без модели)" },
       ],
       quality_flags: [],
@@ -165,6 +170,8 @@ export function conversation(overrides: Partial<ConversationDetail> = {}): Conve
       wait_hours: 27,
       response_sla_hours: 4,
       sla_breached: true,
+      reply_state: "manager",
+      raw_wait_hours: 27,
       median_response_minutes: 20,
     },
     ...overrides,

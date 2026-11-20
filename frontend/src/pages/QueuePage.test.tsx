@@ -54,7 +54,7 @@ describe("queue page", () => {
     expect(within(row).getByText("Специалист по ответственной игре")).toBeInTheDocument();
     expect(within(row).getByText("Нужна проверка")).toBeInTheDocument();
     expect(within(row).getByText("Бонус уязвимому игроку")).toBeInTheDocument();
-    expect(within(row).getByText("не ждёт")).toBeInTheDocument();
+    expect(within(row).getByText("ход за игроком")).toBeInTheDocument();
   });
 
   it("switches views and priority filters through the URL", async () => {
@@ -70,7 +70,7 @@ describe("queue page", () => {
     expect(queueCalls(calls).at(-1)).toBe("/api/queue?priority=P0");
 
     await user.click(screen.getByRole("tab", { name: /Решённые/ }));
-    expect(queueCalls(calls).at(-1)).toBe("/api/queue?status=resolved&priority=P0");
+    expect(queueCalls(calls)).toContain("/api/queue?status=resolved&priority=P0");
   });
 
   it("opens with filters from a shared link", async () => {
@@ -119,7 +119,7 @@ describe("queue page: oversight links", () => {
     const calls = serveApi(vi, { "/api/meta": meta, "/api/queue": [queueItem()] });
     renderQueue("/queue?manager=mgr-01");
     await screen.findAllByRole("link", { name: /Demo Player/ });
-    expect(queueCalls(calls).at(-1)).toBe("/api/queue?status=open&status=in_progress&manager=mgr-01");
+    expect(queueCalls(calls)).toContain("/api/queue?status=open&status=in_progress&manager=mgr-01");
 
     await user.click(screen.getByRole("button", { name: /Менеджер mgr-01/ }));
     expect(queueCalls(calls).at(-1)).toBe("/api/queue?status=open&status=in_progress");
@@ -138,7 +138,8 @@ describe("queue page: review fixes", () => {
     serveApi(vi, { "/api/meta": meta, "/api/queue": [queueItem()] });
     renderQueue("/queue?manager=mgr-01");
     await screen.findAllByRole("link", { name: /Demo Player/ });
-    expect(screen.getByRole("tab", { name: "Активные" })).toBeInTheDocument();
+    // Counted over this manager's items, never the department-wide 6 from meta.
+    expect(await screen.findByRole("tab", { name: "Активные 1" })).toBeInTheDocument();
   });
 
   it("points at the manager filter when it empties the list", async () => {
@@ -306,3 +307,75 @@ describe("inbox: manager alerts", () => {
   });
 });
 
+
+describe("queue page: why a long wait is low priority", () => {
+  it("says the player's turn or that no answer is needed, and explains the rings", async () => {
+    const thanks = queueItem({
+      task_id: 30,
+      conversation_id: "d-030",
+      player: { player_id: "p-030", display_name: "Demo Player 030", manager_id: "mgr-01", segment: "gold" },
+      priority: "P3",
+      wait_hours: null,
+      awaiting_reply: false,
+      reply_state: "no_reply_needed",
+      overdue: false,
+      sla_lane: "ok",
+    });
+    const theirTurn = queueItem({
+      task_id: 31,
+      conversation_id: "d-031",
+      player: { player_id: "p-031", display_name: "Demo Player 031", manager_id: "mgr-01", segment: "gold" },
+      priority: "P2",
+      wait_hours: null,
+      awaiting_reply: false,
+      overdue: false,
+      sla_lane: "ok",
+    });
+    serveApi(vi, { "/api/meta": meta, "/api/queue": [thanks, theirTurn] });
+    renderQueue();
+    const [first, second] = await screen.findAllByRole("link", { name: /Demo Player 03/ });
+    expect(first).toHaveTextContent("не требует ответа (AI)");
+    expect(second).toHaveTextContent("ход за игроком");
+    expect(screen.getByText(/кольцо заполняется/)).toBeInTheDocument();
+  });
+});
+
+describe("queue page: small fixes", () => {
+  it("says «Действий не требуется» for a low priority without a next step", async () => {
+    const quiet = queueItem({ task_id: 50, conversation_id: "d-050", priority: "P3", next_action: null, overdue: false, sla_lane: "ok" });
+    serveApi(vi, { "/api/meta": meta, "/api/queue": [quiet] });
+    renderQueue();
+    const [row] = await screen.findAllByRole("link", { name: /Demo Player 001/ });
+    expect(row).toHaveTextContent("Действий не требуется");
+  });
+
+  it("counts the tabs over the manager's own players in the manager role", async () => {
+    localStorage.setItem("vip-pulse-role", "manager:mgr-01");
+    const mine = [
+      queueItem(),
+      queueItem({ task_id: 51, conversation_id: "d-051", status: "resolved" }),
+      queueItem({ task_id: 52, conversation_id: "d-052", status: "no_action" }),
+    ];
+    serveApi(vi, { "/api/meta": meta, "/api/queue": (url: string) => (url.includes("status=") ? [mine[0]] : mine) });
+    renderQueue();
+    const tabs = await screen.findAllByRole("tab");
+    await screen.findByText("3");
+    expect(tabs.map((t) => t.textContent)).toEqual(["Активные 1", "Все 3", "Решённые 1", "Без действий 1"]);
+    localStorage.clear();
+  });
+});
+
+describe("queue page: tab counts follow the priority filter", () => {
+  it("counts only P0 items when the P0 filter is on", async () => {
+    const p0 = [
+      queueItem(),
+      queueItem({ task_id: 81, conversation_id: "d-081", status: "resolved" }),
+    ];
+    const calls = serveApi(vi, { "/api/meta": meta, "/api/queue": (url: string) => (url.includes("status=") ? [p0[0]] : p0) });
+    renderQueue("/queue?priority=P0");
+    await screen.findByText("2");
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs).toEqual(["Активные 1", "Все 2", "Решённые 1", "Без действий 0"]);
+    expect(calls).toContain("/api/queue?priority=P0");
+  });
+});

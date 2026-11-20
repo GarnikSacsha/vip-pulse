@@ -72,6 +72,8 @@ def test_queue_is_sorted_by_priority_then_wait(client: TestClient) -> None:
     assert [i["conversation_id"] for i in items[:3]] == ["d-001", "d-009", "d-004"]
     assert [i["priority"] for i in items] == sorted(i["priority"] for i in items)
     first = items[0]
+    profile = first["player"].pop("profile")
+    assert profile["account_status"] is None  # the sample format has no such column
     assert first["player"] == {
         "player_id": "p-001",
         "display_name": "Demo Player 001",
@@ -106,7 +108,8 @@ def test_conversation_detail_marks_evidence(client: TestClient) -> None:
     body = client.get("/api/conversations/d-001").json()
     assert body["conversation_id"] == "d-001"
     assert [m["message_id"] for m in body["messages"]] == ["m-001-1", "m-001-2", "m-001-3"]
-    assert [m["is_evidence"] for m in body["messages"]] == [True, False, False]
+    # m-001-2: the broken promise the analysis cites as a manager mistake
+    assert [m["is_evidence"] for m in body["messages"]] == [True, True, False]
     assert [m["is_pending"] for m in body["messages"]] == [False, False, True]
     assert body["messages"][0]["sent_at"] == "2026-11-10T09:00:00Z"
     assert body["analysis"]["category"] == "withdrawal"
@@ -196,7 +199,7 @@ def test_unknown_task_is_404(client: TestClient) -> None:
 
 
 def test_triage_can_be_rerun_from_the_api(client: TestClient) -> None:
-    body = client.post("/api/triage/run").json()
+    body = client.post("/api/triage/run", json={}).json()
     assert body == {
         "analysed": 0,
         "reused": 9,
@@ -217,7 +220,8 @@ def test_queue_marks_overdue_only_active_items_past_their_sla(client: TestClient
     items = {i["conversation_id"]: i for i in client.get("/api/queue").json()}
     assert {c for c, i in items.items() if i["overdue"]} == {"d-001"}
     # d-003 waits 73 h but needs no action (closing message): not overdue work.
-    assert items["d-003"]["awaiting_reply"] is True
+    assert items["d-003"]["awaiting_reply"] is False  # one source: no reply needed (0017)
+    assert items["d-003"]["reply_state"] == "no_reply_needed"
     assert items["d-003"]["overdue"] is False
     # d-009 is email: 5.75 h is inside its 8 h SLA.
     assert items["d-009"]["overdue"] is False
@@ -239,9 +243,9 @@ def test_overview_totals(client: TestClient) -> None:
         "in_progress": 0,
         "critical": 3,
         "overdue": 1,
-        "awaiting_reply": 4,
+        "awaiting_reply": 3,  # d-009 waits for security, not a manager (0017)
         "escalated": 2,
-        "quality_issues": 1,
+        "quality_issues": 3,  # d-004 bonus (code), d-001 and d-005 (analysis)
         "needs_review": 2,
         "resolved": 0,
         "no_action": 4,
@@ -259,6 +263,8 @@ def test_overview_workload_by_manager(client: TestClient) -> None:
             "critical": 1,
             "overdue": 1,
             "oldest_wait_hours": 27.0,
+            "errors": 3,  # + d-001 waiting past the SLA (rule, 0019)
+            "error_conversations": 2,  # d-001 (two mistakes), d-005
         },
         {
             "manager_id": "mgr-02",
@@ -267,7 +273,9 @@ def test_overview_workload_by_manager(client: TestClient) -> None:
             "in_progress": 0,
             "critical": 2,
             "overdue": 0,
-            "oldest_wait_hours": 5.75,
+            "oldest_wait_hours": None,  # d-009 waits for security (0017)
+            "errors": 1,
+            "error_conversations": 1,
         },
     ]
 
@@ -363,9 +371,9 @@ def test_coverage_counts_imported_conversations_not_yet_triaged(sample_paths) ->
 
 def test_concurrent_triage_run_is_rejected(client: TestClient) -> None:
     with RUN_LOCK:
-        response = client.post("/api/triage/run")
+        response = client.post("/api/triage/run", json={})
     assert response.status_code == 409
-    assert client.post("/api/triage/run").status_code == 200
+    assert client.post("/api/triage/run", json={}).status_code == 200
 
 
 class MeteredProvider(FakeProvider):
@@ -435,3 +443,61 @@ def test_winback_lists_candidates_and_filters_by_manager(client: TestClient) -> 
         assert item["reasons"]
     mine = client.get("/api/winback", params={"manager": "mgr-02"}).json()
     assert all(i["player"]["manager_id"] == "mgr-02" for i in mine)
+
+
+# --- manager mistakes found by the analysis -------------------------------------------------
+
+
+def test_queue_items_carry_manager_errors_with_evidence(client: TestClient) -> None:
+    items = {i["conversation_id"]: i for i in client.get("/api/queue").json()}
+    assert items["d-001"]["manager_errors"] == [
+        {"code": "broken_promise", "evidence_message_ids": ["m-001-2"]}
+    ]
+    assert items["d-002"]["manager_errors"] == []
+
+
+def test_conversation_marks_manager_error_messages_as_evidence(client: TestClient) -> None:
+    body = client.get("/api/conversations/d-005").json()
+    assert body["analysis"]["manager_errors"] == [
+        {"code": "incomplete_answer", "evidence_message_ids": ["m-005-2"]}
+    ]
+    cited = {m["message_id"]: m["is_evidence"] for m in body["messages"]}
+    assert cited["m-005-2"] is True
+
+
+def test_meta_lists_managers_from_the_data(client: TestClient) -> None:
+    # For the demo role switcher: the managers come from players.csv, nothing is hard-coded.
+    assert client.get("/api/meta").json()["managers"] == ["mgr-01", "mgr-02"]
+
+
+# --- audit fixes: thresholds re-read on every run; no cross-site trigger of a paid run -------
+
+
+def test_triage_run_needs_a_json_request(client: TestClient) -> None:
+    # A plain form post from another site cannot carry this content type without a preflight.
+    response = client.post("/api/triage/run")
+    assert response.status_code == 415
+    assert client.post("/api/triage/run", json={}).status_code == 200
+
+
+def test_api_rereads_changed_thresholds(sample_paths, tmp_path) -> None:
+    from pathlib import Path
+
+    from app.policy.config import DEFAULT_POLICY_PATH
+
+    path = tmp_path / "thresholds.yaml"
+    text = Path(DEFAULT_POLICY_PATH).read_text(encoding="utf-8")
+    path.write_text(text, encoding="utf-8")
+    with TestClient(create_app(engine=_engine(sample_paths), policy_path=path)) as client:
+        assert _item(client, "d-001")["priority"] == "P0"  # withdrawal waiting 27 h > 24 h
+        path.write_text(
+            text.replace("critical_wait_hours: 24", "critical_wait_hours: 48"), encoding="utf-8"
+        )
+        assert client.post("/api/triage/run", json={}).status_code == 200
+        assert _item(client, "d-001")["priority"] == "P1"
+
+
+def _item(client: TestClient, conversation_id: str) -> dict:
+    return next(
+        i for i in client.get("/api/queue").json() if i["conversation_id"] == conversation_id
+    )

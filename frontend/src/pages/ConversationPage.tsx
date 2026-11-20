@@ -8,7 +8,9 @@ import { formatShort, formatWait } from "../lib/format";
 import {
   CATEGORY_LABEL,
   CHANNEL_LABEL,
-  PRIORITY_LABEL,
+  HANDED_OVER_STEP,
+  MANAGER_ERROR_LABEL,
+  PRIORITY_NAME,
   ROUTE_LABEL,
   SENDER_LABEL,
   SENTIMENT_LABEL,
@@ -16,6 +18,7 @@ import {
   alertText,
   qualityFlagLabel,
 } from "../lib/labels";
+import { isReadOnly, managerOf, useRole } from "../lib/role";
 import { useApi } from "../lib/useApi";
 import type { InboxContext, PaneTab } from "./QueuePage";
 
@@ -140,8 +143,11 @@ function Conversation({
   onChanged: () => void;
 }) {
   const { task, analysis, player } = data;
+  // In the manager role an escalated case shows a neutral step; the lead sees the full analysis.
+  const handedOver = managerOf(useRole().role) !== null && task !== null && task.route !== "manager";
   const name = player.display_name ?? player.player_id;
-  const [hot, setHot] = useState<string | null>(null);
+  // A link can name a message (?msg=…), e.g. a manager mistake from the team lead page.
+  const [hot, setHot] = useState<string | null>(() => new URLSearchParams(search).get("msg"));
   // The inbox keeps the tab across conversations; standalone, the pane keeps its own.
   const [localTab, setLocalTab] = useState<PaneTab>("analysis");
   const tab = pane ?? localTab;
@@ -195,7 +201,7 @@ function Conversation({
             {task && (
               <div className="text-right text-sm">
                 <p className="font-medium">{`Статус: ${STATUS_LABEL[task.status]}`}</p>
-                <p className="text-muted">{PRIORITY_LABEL[task.priority]} приоритет</p>
+                <p className="text-muted">{`Приоритет: ${PRIORITY_NAME[task.priority]}`}</p>
               </div>
             )}
           </div>
@@ -208,7 +214,7 @@ function Conversation({
             ))}
           </ul>
           <p className="mx-auto mt-5 max-w-2xl text-xs text-muted">
-            Номера в кружках — сообщения, на которые ссылается разбор. Наведите на номер справа, чтобы найти
+            Номера в кружках и метка «Цитата для разбора» — сообщения, на которые ссылается разбор. Наведите на номер справа, чтобы найти
             сообщение. Время — UTC.
           </p>
         </div>
@@ -265,9 +271,15 @@ function Conversation({
                   <p className="mt-0.5">{alertText(alert).action}</p>
                 </div>
               ))}
-              {task && <NextStep task={task} onChanged={onChanged} />}
+              {task && <NextStep task={task} onChanged={onChanged} handedOver={handedOver} />}
               {task && <Reasons task={task} />}
-              <AnalysisCard analysis={analysis} messages={data.messages} highlight={highlight} />
+              {handedOver ? (
+                <Card title="Разбор">
+                  <p className="text-sm text-muted">Случай передан специалисту. Полный разбор видит тимлид.</p>
+                </Card>
+              ) : (
+                <AnalysisCard analysis={analysis} messages={data.messages} highlight={highlight} />
+              )}
               <Facts facts={data.facts} messages={data.messages} highlight={highlight} />
               {task && <History taskId={task.task_id} version={`${task.status}:${task.updated_at}`} />}
             </>
@@ -314,7 +326,7 @@ function MessageBubble({ message, highlight }: { message: MessageOut; highlight:
           {n !== undefined && <RefNumber n={n} active={lit} />}
           <span className="font-medium text-ink">{SENDER_LABEL[message.sender_role]}</span>
           <span className="tabular-nums">{formatShort(message.sent_at)}</span>
-          {message.is_evidence && <Tag tone="accent">Основание вывода</Tag>}
+          {message.is_evidence && <Tag tone="accent">Цитата для разбора</Tag>}
           {message.is_pending && <Tag tone="warn">Ждёт ответа</Tag>}
         </p>
         <p className="whitespace-pre-line leading-relaxed">{message.text}</p>
@@ -402,7 +414,16 @@ function Card({
   );
 }
 
-function NextStep({ task, onChanged }: { task: TaskOut; onChanged: () => void }) {
+function NextStep({
+  task,
+  onChanged,
+  handedOver = false,
+}: {
+  task: TaskOut;
+  onChanged: () => void;
+  handedOver?: boolean;
+}) {
+  const readOnly = isReadOnly(useRole().role);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -423,7 +444,9 @@ function NextStep({ task, onChanged }: { task: TaskOut; onChanged: () => void })
 
   return (
     <Card title="Следующий шаг">
-      <p className="text-sm leading-relaxed">{task.next_action ?? "Действий не требуется."}</p>
+      <p className="text-sm leading-relaxed">
+        {handedOver ? HANDED_OVER_STEP : (task.next_action ?? "Действий не требуется.")}
+      </p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {task.route !== "manager" && <Tag tone="danger">{ROUTE_LABEL[task.route]}</Tag>}
         {task.quality_flags.map((f) => (
@@ -434,6 +457,10 @@ function NextStep({ task, onChanged }: { task: TaskOut; onChanged: () => void })
         {task.requires_review && <Tag tone="warn">Нужна проверка человеком</Tag>}
       </div>
 
+      {readOnly ? (
+        <p className="mt-4 text-xs text-muted">Режим просмотра: статус меняет менеджер или тимлид.</p>
+      ) : (
+        <>
       <label htmlFor="action-note" className="mt-4 block text-xs text-muted">
         Комментарий к действию
       </label>
@@ -465,6 +492,8 @@ function NextStep({ task, onChanged }: { task: TaskOut; onChanged: () => void })
         <p role="alert" className="mt-2 text-sm text-danger">
           {error}
         </p>
+      )}
+        </>
       )}
     </Card>
   );
@@ -508,7 +537,8 @@ function AnalysisCard({
       </Card>
     );
   }
-  const cited = messages.filter((m) => m.is_evidence).map((m) => m.message_id);
+  const errorIds = new Set(analysis.manager_errors.flatMap((e) => e.evidence_message_ids));
+  const cited = messages.filter((m) => m.is_evidence && !errorIds.has(m.message_id)).map((m) => m.message_id);
   return (
     <Card
       title="Разбор"
@@ -542,6 +572,19 @@ function AnalysisCard({
           </>
         )}
       </dl>
+      {analysis.manager_errors.length > 0 && (
+        <div className="mt-3">
+          <p className="text-sm font-medium">Ошибки менеджера</p>
+          <ul aria-label="Ошибки менеджера" className="mt-1 space-y-1 text-sm">
+            {analysis.manager_errors.map((e) => (
+              <li key={e.code}>
+                {MANAGER_ERROR_LABEL[e.code]}
+                <Pills ids={e.evidence_message_ids} highlight={highlight} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <p className="mt-3 text-xs text-muted">{`Источник: ${analysis.label}`}</p>
     </Card>
   );
@@ -562,14 +605,27 @@ function Facts({
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="text-muted">Ожидание</dt>
         <dd>
-          <span className="tabular-nums">{facts.awaiting_reply ? formatWait(facts.wait_hours) : "игрок не ждёт"}</span>
+          {facts.reply_state === "no_reply_needed" ? (
+            // The model's decision, shown as such; the SLA does not apply to it.
+            <span>
+              Ответ не требуется (AI)
+              {facts.raw_wait_hours !== null && (
+                <span className="block text-xs text-muted">
+                  последнее сообщение игрока {formatWait(facts.raw_wait_hours)} назад
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className="tabular-nums">{facts.awaiting_reply ? formatWait(facts.wait_hours) : "игрок не ждёт"}</span>
+          )}
           {facts.awaiting_reply && <Pills ids={pending} highlight={highlight} />}
         </dd>
-        <dt className="text-muted">SLA</dt>
+        {/* The channel's response SLA. The money escalation threshold is a separate rule: see reasons. */}
+        <dt className="text-muted">SLA канала</dt>
         <dd className={facts.sla_breached ? "text-danger" : ""}>
-          {facts.sla_breached
-            ? `SLA ${facts.response_sla_hours} ч нарушен`
-            : `в пределах ${facts.response_sla_hours} ч`}
+          {facts.awaiting_reply
+            ? `${facts.response_sla_hours} ч, ${facts.sla_breached ? "нарушен" : "в пределах"}`
+            : `${facts.response_sla_hours} ч, сейчас не применяется`}
         </dd>
         {facts.median_response_minutes !== null && (
           <>

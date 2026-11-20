@@ -42,6 +42,12 @@ def _usd(value: float) -> str:
     return "$" + f"{value:,.0f}".replace(",", " ")
 
 
+def is_deposit_spike(now: float, before: float, cfg: PolicyConfig) -> bool:
+    """A sharp rise: by the ratio and by at least the minimum amount (both in thresholds.yaml)."""
+    rules = cfg.player
+    return now > before * rules.deposit_spike_ratio and now - before >= rules.deposit_spike_min_usd
+
+
 def player_signals(player: Player | None, conv: Conversation, cfg: PolicyConfig) -> PlayerSignals:
     if player is None:
         return PlayerSignals()
@@ -84,7 +90,7 @@ def player_signals(player: Player | None, conv: Conversation, cfg: PolicyConfig)
                     text=f"Депозиты за 30 дней упали: {_usd(before)} → {_usd(now)}",
                 )
             )
-        elif now > before * rules.deposit_spike_ratio:
+        elif is_deposit_spike(now, before, cfg):
             review = True
             trend.append(
                 Reason(

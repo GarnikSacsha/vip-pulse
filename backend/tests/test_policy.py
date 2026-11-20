@@ -303,3 +303,15 @@ def test_safety_reason_from_analysis_is_labelled_but_keyword_reason_is_not() -> 
     facts = compute_facts(by_keyword, T0, CFG.sla)
     d = decide(facts, a, detect_safety(by_keyword, CFG), CFG, simulated=True)
     assert d.reasons[0].text == "Возможный взлом или мошенничество"  # found by code, not a model
+
+
+def test_reason_texts_name_which_threshold_they_use() -> None:
+    # Two thresholds stand side by side in the conversation card: each says what it is.
+    c = conv(("player", 0, "Где мой вывод?"))
+    _, d = run(c, action("withdrawal"), 30)
+    assert d.reasons[0].text == (
+        "Финансовый запрос без ответа 30 ч (порог эскалации финансового запроса: 24 ч)"
+    )
+    c = conv(("player", 0, "Слоты не грузятся"))
+    _, d = run(c, action("technical"), 30)
+    assert d.reasons[0].text == "Игрок ждёт ответа 30 ч (SLA канала: 4 ч)"

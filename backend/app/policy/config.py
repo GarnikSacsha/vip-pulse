@@ -35,8 +35,11 @@ class SafetyConfig(_Cfg):
     fraud_security: tuple[str, ...]
     # Another account or a shared card: the manager must contact the player personally.
     multi_account: tuple[str, ...] = ()
+    # Crediting words. With the offer words they mark a manager crediting a bonus before the
+    # security check of a fraud or shared-account case (decision 0021).
+    credit_words: tuple[str, ...] = ()
 
-    @field_validator("responsible_gaming", "fraud_security", "multi_account")
+    @field_validator("responsible_gaming", "fraud_security", "multi_account", "credit_words")
     @classmethod
     def _lower(cls, words: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(w.lower() for w in words)
@@ -49,11 +52,14 @@ class PlayerConfig(_Cfg):
     pending_withdrawal_usd: float = Field(default=1000, gt=0)
     deposit_drop_share: float = Field(default=0.5, gt=0, lt=1)  # now < share × previous 30 days
     deposit_spike_ratio: float = Field(default=1.7, gt=1)  # now > ratio × previous 30 days
+    # ...and grew by at least this much in USD: small sums are not a harm signal (assumption).
+    deposit_spike_min_usd: float = Field(default=1000, ge=0)
 
 
 class WinbackConfig(_Cfg):
     silent_days: int = Field(default=14, ge=1)  # no login this long = went silent
     no_contact_days: int = Field(default=21, ge=1)  # last conversation this long ago
+    birthday_window_days: int = Field(default=7, ge=0, le=31)  # ± days from the data date
 
 
 class PolicyConfig(_Cfg):

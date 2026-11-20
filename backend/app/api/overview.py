@@ -24,6 +24,7 @@ from app.api.schemas import (
 from app.models import AnalysisRow, ConversationRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.policy.priority import Route
+from app.policy.sla import ReplyState
 from app.schemas.analysis import Priority, ProcessingStatus
 from app.tasks.service import TaskStatus
 
@@ -34,6 +35,10 @@ def _active(item: QueueItem) -> bool:
     return item.status in ACTIVE
 
 
+def _has_mistake(item: QueueItem) -> bool:
+    return bool(item.quality_flags or item.manager_errors or item.rule_errors)
+
+
 def _totals(items: list[QueueItem]) -> OverviewTotals:
     active = [i for i in items if _active(i)]
     return OverviewTotals(
@@ -42,9 +47,11 @@ def _totals(items: list[QueueItem]) -> OverviewTotals:
         in_progress=sum(i.status == TaskStatus.IN_PROGRESS for i in items),
         critical=sum(i.priority == Priority.P0 for i in active),
         overdue=sum(i.overdue for i in active),
-        awaiting_reply=sum(i.awaiting_reply for i in active),
+        # Players the managers owe a reply; escalations are counted in `escalated`.
+        awaiting_reply=sum(i.reply_state == ReplyState.MANAGER for i in active),
         escalated=sum(i.route != Route.MANAGER for i in active),
-        quality_issues=sum(bool(i.quality_flags) for i in active),
+        # Mistakes are about how a contact went, so closed conversations count too.
+        quality_issues=sum(_has_mistake(i) for i in items),
         needs_review=sum(i.requires_review for i in active),
         resolved=sum(i.status == TaskStatus.RESOLVED for i in items),
         no_action=sum(i.status == TaskStatus.NO_ACTION for i in items),
@@ -58,7 +65,11 @@ def _managers(items: list[QueueItem]) -> list[ManagerLoad]:
     loads = []
     for manager_id, group in groups.items():
         active = [i for i in group if _active(i)]
-        waits = [i.wait_hours for i in active if i.awaiting_reply and i.wait_hours is not None]
+        waits = [
+            i.wait_hours
+            for i in active
+            if i.reply_state == ReplyState.MANAGER and i.wait_hours is not None
+        ]
         loads.append(
             ManagerLoad(
                 manager_id=manager_id,
@@ -68,6 +79,10 @@ def _managers(items: list[QueueItem]) -> list[ManagerLoad]:
                 critical=sum(i.priority == Priority.P0 for i in active),
                 overdue=sum(i.overdue for i in active),
                 oldest_wait_hours=max(waits) if waits else None,
+                errors=sum(
+                    len(i.quality_flags) + len(i.manager_errors) + len(i.rule_errors) for i in group
+                ),
+                error_conversations=sum(_has_mistake(i) for i in group),
             )
         )
     # Players without a manager last: they are the gap the lead must close.

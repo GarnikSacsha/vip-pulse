@@ -52,6 +52,30 @@ class SafetyFlag(StrEnum):
     FRAUD_SECURITY = "fraud_security"  # account takeover, suspicious payments
 
 
+class ManagerErrorCode(StrEnum):
+    """Mistakes in how the manager handled the contact, judged from the text.
+
+    Closed list. Mistakes that rules can count stay in code (app.policy): a bonus offered to a
+    vulnerable player, a reply later than the SLA.
+    """
+
+    CANNED_REPLY = "canned_reply"  # a template or brush-off instead of an answer
+    RUDE_TONE = "rude_tone"
+    WRONG_INFO = "wrong_info"  # wrong terms, amounts or rules
+    INCOMPLETE_ANSWER = "incomplete_answer"  # the player's question left unanswered
+    WRONG_NAME = "wrong_name"  # wrong name or other personal data of the player
+    BROKEN_PROMISE = "broken_promise"  # promised to come back and did not
+    RETENTION_PRESSURE = "retention_pressure"  # pushes to keep playing or not withdraw
+
+
+class ManagerError(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    code: ManagerErrorCode
+    # The manager messages that show the mistake. Checked against the conversation (fail closed).
+    evidence_message_ids: list[str] = Field(min_length=1, max_length=5)
+
+
 class ProcessingStatus(StrEnum):
     OK = "ok"
     FAILED = "failed"
@@ -72,6 +96,7 @@ class LLMAnalysis(BaseModel):
     safety_flag: SafetyFlag = SafetyFlag.NONE
     evidence_message_ids: list[str] = Field(default_factory=list, max_length=10)
     confidence: float = Field(ge=0.0, le=1.0)
+    manager_errors: list[ManagerError] = Field(default_factory=list, max_length=7)
 
     @field_validator("evidence_message_ids")
     @classmethod

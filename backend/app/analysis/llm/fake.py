@@ -23,6 +23,11 @@ _CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
 _THANKS = ("спасибо", "благодар", "thank", "всё пришло", "все пришло")
 _NEGATIVE = ("нет ответа", "ответа нет", "где мои", "ухожу", "срочно", "не пришло", "сколько можно")
 _URGENT = ("срочно", "где мои", "ухожу", "не могу вывести", "это был не я")
+_PROMISE = ("вернусь", "отпишусь", "сообщу", "напишу вам")
+_STILL_WAITING = ("ответа нет", "нет ответа", "прошли сутки", "сколько можно", "до сих пор")
+_ASKS_WHEN = ("когда", "сколько ждать", "какой срок")
+_FOLLOW_UP = ("есть новости", "ну что", "и что", "?")
+_TIMING = ("сегодня", "завтра", "час", "дн", "минут", "недел")
 _RG = ("самоисключ", "не могу остановиться", "заблокируйте меня", "закрыть аккаунт")
 _FRAUD = ("это был не я", "это не я", "взлом", "hacked")
 
@@ -40,6 +45,28 @@ _ACTIONS = {
 
 def _has(text: str, words: tuple[str, ...]) -> bool:
     return any(w in text for w in words)
+
+
+def _manager_errors(human: list[dict[str, str]]) -> list[dict[str, object]]:
+    """Two mistakes keywords can spot: a broken promise and a question left without a date."""
+    errors: list[dict[str, object]] = []
+    for i, m in enumerate(human):
+        if m["role"] != "manager":
+            continue
+        text = m["text"].lower()
+        before = [h["text"].lower() for h in human[:i] if h["role"] == "player"]
+        after = [h["text"].lower() for h in human[i + 1 :] if h["role"] == "player"]
+        if _has(text, _PROMISE) and any(_has(a, _STILL_WAITING) for a in after):
+            errors.append({"code": "broken_promise", "evidence_message_ids": [m["id"]]})
+        elif (
+            before
+            and _has(before[-1], _ASKS_WHEN)
+            and not _has(text, _TIMING)
+            and not any(ch.isdigit() for ch in text)
+            and any(_has(a, _FOLLOW_UP) for a in after)
+        ):
+            errors.append({"code": "incomplete_answer", "evidence_message_ids": [m["id"]]})
+    return errors
 
 
 class FakeProvider:
@@ -96,5 +123,6 @@ class FakeProvider:
             "safety_flag": safety,
             "evidence_message_ids": evidence if (requires_action or safety != "none") else [],
             "confidence": 0.55,
+            "manager_errors": _manager_errors(human),
         }
         return json.dumps(result, ensure_ascii=False)

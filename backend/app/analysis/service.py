@@ -21,7 +21,7 @@ from app.analysis.prompts import (
 )
 from app.policy.facts import ConversationFacts
 from app.schemas.analysis import AnalysisOutcome, LLMAnalysis, ProcessingStatus
-from app.schemas.domain import Conversation, Player
+from app.schemas.domain import Conversation, Player, SenderRole
 
 _FENCE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.DOTALL)
 
@@ -59,9 +59,15 @@ def parse_output(raw: str, conv: Conversation) -> LLMAnalysis:
         first = exc.errors()[0]
         where = ".".join(str(p) for p in first["loc"]) or "root"
         raise InvalidOutput(f"schema violation at {where}: {first['msg']}") from exc
-    unknown = [i for i in result.evidence_message_ids if i not in conv.message_ids]
+    cited = [*result.evidence_message_ids]
+    cited += [i for e in result.manager_errors for i in e.evidence_message_ids]
+    unknown = [i for i in cited if i not in conv.message_ids]
     if unknown:
         raise InvalidOutput(f"evidence cites messages not in this conversation: {unknown}")
+    manager = {m.message_id for m in conv.messages if m.sender_role == SenderRole.MANAGER}
+    for error in result.manager_errors:
+        if not manager.intersection(error.evidence_message_ids):
+            raise InvalidOutput(f"manager error {error.code.value} cites no manager message")
     return result
 
 

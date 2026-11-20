@@ -260,3 +260,63 @@ def test_money_signals_do_not_raise_to_p1_when_nothing_needs_an_answer() -> None
     conv = _conv((SenderRole.PLAYER, "Всё пришло, спасибо"))
     d = _decide(conv, _player(failed_deposits_7d="5"), _analysis(requires_action=False))
     assert d.priority == Priority.P2
+
+
+# --- a next step for priorities raised by the profile, when the model saw nothing to do -------
+
+
+def test_profile_signal_without_a_model_step_gets_a_step_from_code() -> None:
+    cases = {
+        "player.pending_withdrawal": _player(pending_withdrawal_usd="2800"),
+        "player.failed_deposits": _player(failed_deposits_7d="4"),
+        "player.deposit_spike": _player(deposits_30d_usd="9800", deposits_prev_30d_usd="5200"),
+        "player.deposit_drop": _player(deposits_30d_usd="1500", deposits_prev_30d_usd="22000"),
+    }
+    for code, player in cases.items():
+        d = _decide(QUIET, player)  # the model: nothing to do
+        assert code in [r.code for r in d.reasons]
+        assert d.next_action, code
+        assert not any(w in d.next_action.lower() for w in CFG.offers), code
+
+
+def test_model_step_wins_over_the_profile_step() -> None:
+    conv = _conv((SenderRole.PLAYER, "Привет"))
+    step = _analysis(
+        requires_action=True, next_action="Ответить игроку", evidence_message_ids=["c-1"]
+    )
+    d = _decide(conv, _player(failed_deposits_7d="4"), step)
+    assert d.next_action == "Ответить игроку"
+
+
+def test_profile_step_never_replaces_the_specialist_template() -> None:
+    d = _decide(QUIET, _player(account_status="self_excluded", pending_withdrawal_usd="2800"))
+    assert d.route == Route.RG_SPECIALIST
+    assert "вывод" not in (d.next_action or "").lower()
+
+
+def test_small_deposit_growth_is_not_a_spike() -> None:
+    # $700 → $1 200 is 1.7x but only $500 more: below deposit_spike_min_usd, not a harm signal.
+    assert CFG.player.deposit_spike_min_usd == 1000
+    d = _decide(QUIET, _player(deposits_30d_usd="1200", deposits_prev_30d_usd="700"))
+    assert "player.deposit_spike" not in [r.code for r in d.reasons]
+    d = _decide(QUIET, _player(deposits_30d_usd="9800", deposits_prev_30d_usd="5200"))
+    assert "player.deposit_spike" in [r.code for r in d.reasons]
+
+
+def test_win_back_uses_the_same_spike_rule() -> None:
+    from app.policy.winback import winback
+
+    p = Player(
+        player_id="w",
+        manager_id="m",
+        segment="VIP",
+        attributes={
+            "account_status": "active",
+            "last_login_at": "2026-01-09",
+            "deposits_30d_usd": "1200",
+            "deposits_prev_30d_usd": "700",
+        },
+    )
+    # Not a spike any more, so the never-contacted player is offered for an introduction.
+    [item] = winback([p], {}, T0, CFG)
+    assert item.player.player_id == "w"

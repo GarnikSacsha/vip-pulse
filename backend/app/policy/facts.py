@@ -75,3 +75,35 @@ def compute_facts(conv: Conversation, as_of: datetime, sla: SlaConfig) -> Conver
         manager_messages=sum(m.sender_role == SenderRole.MANAGER for m in human),
         median_response_minutes=round(median(response_minutes), 1) if response_minutes else None,
     )
+
+
+class LateReply(BaseModel):
+    """A manager reply that came later than the channel's SLA. Counted by code, not the model."""
+
+    model_config = ConfigDict(frozen=True)
+
+    player_message_id: str  # the first player message the manager was late on
+    manager_message_id: str
+    hours: float
+
+
+def late_replies(conv: Conversation, sla: SlaConfig) -> list[LateReply]:
+    """Every manager answer given after the channel's SLA, in any conversation (closed too)."""
+    limit = sla.response_hours_for(conv.channel)
+    found: list[LateReply] = []
+    waiting = None
+    for message in conv.messages:
+        if message.sender_role == SenderRole.PLAYER:
+            waiting = waiting or message
+        elif message.sender_role == SenderRole.MANAGER and waiting is not None:
+            hours = (message.sent_at - waiting.sent_at).total_seconds() / 3600
+            if hours > limit:
+                found.append(
+                    LateReply(
+                        player_message_id=waiting.message_id,
+                        manager_message_id=message.message_id,
+                        hours=round(hours, 1),
+                    )
+                )
+            waiting = None
+    return found

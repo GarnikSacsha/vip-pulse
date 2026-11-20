@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.analysis.llm import LLMProvider
 from app.analysis.llm.budget import meter_of
@@ -18,19 +18,23 @@ from app.api.schemas import (
     MessageOut,
     Meta,
     PlayerOut,
+    PlayerProfile,
     ProviderInfo,
     QueueItem,
     ReasonOut,
+    RuleErrorOut,
 )
 from app.api.tasks import alerts_of
 from app.api.tasks import task_out as to_task_out
-from app.ingestion.store import load_conversation
+from app.ingestion.store import load_conversation, to_domain
 from app.models import AnalysisRow, ConversationRow, PlayerRow, TaskRow
 from app.policy.config import PolicyConfig
-from app.policy.facts import compute_facts
+from app.policy.facts import compute_facts, late_replies
 from app.policy.priority import LABEL_MODEL, LABEL_SIMULATED, Route
-from app.policy.sla import sla_lane
-from app.schemas.analysis import Priority, ProcessingStatus
+from app.policy.safety import credit_before_security_check
+from app.policy.sla import ReplyState, reply_state, sla_lane
+from app.schemas.analysis import ManagerError, Priority, ProcessingStatus
+from app.schemas.domain import Conversation, SenderRole
 from app.tasks.service import TaskStatus, ledger_spent
 
 router = APIRouter(prefix="/api", tags=["queue"])
@@ -47,7 +51,7 @@ def _as_of(session: Session) -> datetime | None:
     return session.scalar(select(func.max(ConversationRow.last_message_at)))
 
 
-def _player(row: PlayerRow) -> PlayerOut:
+def _player(row: PlayerRow, policy: PolicyConfig | None = None) -> PlayerOut:
     return PlayerOut(
         player_id=row.player_id,
         display_name=row.display_name,
@@ -55,7 +59,46 @@ def _player(row: PlayerRow) -> PlayerOut:
         segment=row.segment,
         country=row.attributes.get("country") if row.attributes else None,
         registered_at=row.attributes.get("registered_at") if row.attributes else None,
+        profile=_profile(row.attributes or {}, policy),
     )
+
+
+def _profile(attrs: dict[str, Any], policy: PolicyConfig | None = None) -> PlayerProfile:
+    """Typed profile from the attributes an adapter kept. A value that does not parse is None.
+
+    With the policy, the 30-day deposit change and the drop flag (`player.deposit_drop_share`).
+    """
+    values: dict[str, Any] = {}
+    for name, field in PlayerProfile.model_fields.items():
+        if name in DERIVED:
+            continue
+        raw = attrs.get(name)
+        text = str(raw).strip() if raw is not None else ""
+        if not text:
+            continue
+        if field.annotation == float | None:
+            values[name] = _to_number(text)
+        elif field.annotation == int | None:
+            number = _to_number(text)
+            values[name] = int(number) if number is not None and number.is_integer() else None
+        else:
+            values[name] = text
+    now, before = values.get("deposits_30d_usd"), values.get("deposits_prev_30d_usd")
+    if now is not None and before:
+        values["deposits_change_pct"] = round((now - before) / before * 100, 1)
+        if policy is not None:
+            values["deposit_drop"] = now < before * policy.player.deposit_drop_share
+    return PlayerProfile(**values)
+
+
+DERIVED = frozenset({"deposits_change_pct", "deposit_drop"})
+
+
+def _to_number(text: str) -> float | None:
+    try:
+        return float(text.replace(" ", "").replace(",", "."))
+    except ValueError:
+        return None
 
 
 def _result(analysis: AnalysisRow | None) -> dict[str, Any]:
@@ -88,6 +131,14 @@ def meta(session: SessionDep, provider: Annotated[LLMProvider, Depends(get_provi
             spent_usd=ledger_spent(session) if meter else None,
         ),
         counts=Counts(total=sum(by_status.values()), by_status=by_status, by_priority=by_priority),
+        managers=list(
+            session.scalars(
+                select(PlayerRow.manager_id)
+                .where(PlayerRow.manager_id.is_not(None))
+                .distinct()
+                .order_by(PlayerRow.manager_id)
+            )
+        ),
     )
 
 
@@ -122,11 +173,64 @@ ACTIVE = frozenset({TaskStatus.OPEN, TaskStatus.IN_PROGRESS})
 SLA_BREACH_REASONS = frozenset({"sla.breached", "sla.money_critical"})
 
 
-def is_overdue(task: TaskRow) -> bool:
-    """Active work that the last triage found waiting longer than the channel's SLA."""
-    return TaskStatus(task.status) in ACTIVE and any(
-        r.get("code") in SLA_BREACH_REASONS for r in task.reasons
+def task_reply_state(task: TaskRow) -> ReplyState:
+    """Who owes the next message: the one source for waits, lanes and overdue counts (0017)."""
+    return reply_state(
+        awaiting_reply=task.awaiting_reply,
+        reply_needed=not any(r.get("code") == "sla.no_reply_needed" for r in task.reasons),
+        escalated=task.route != Route.MANAGER,
     )
+
+
+def is_overdue(task: TaskRow) -> bool:
+    """Active work where the manager owes a reply past the channel's SLA («Горит»).
+
+    Escalated cases are counted in «У специалиста», not here.
+    """
+    return (
+        TaskStatus(task.status) in ACTIVE
+        and task_reply_state(task) == ReplyState.MANAGER
+        and any(r.get("code") in SLA_BREACH_REASONS for r in task.reasons)
+    )
+
+
+def _manager_errors(result: dict[str, Any]) -> list[ManagerError]:
+    """Mistakes stored with the analysis. Older analyses (before prompt v4) have none."""
+    return [ManagerError.model_validate(e) for e in result.get("manager_errors") or []]
+
+
+def _rule_errors(
+    conv: Conversation, task: TaskRow, late: bool, policy: PolicyConfig
+) -> list[RuleErrorOut]:
+    """Mistakes code counts: late answers in the history, and a player waiting past the SLA now."""
+    found = [
+        RuleErrorOut(
+            code="late_reply",
+            evidence_message_ids=[r.player_message_id, r.manager_message_id],
+            hours=r.hours,
+        )
+        for r in late_replies(conv, policy.sla)
+    ]
+    found += [
+        RuleErrorOut(code="offer_before_security_check", evidence_message_ids=[mid], hours=None)
+        for mid in credit_before_security_check(conv, policy, task.route)
+    ]
+    if late:
+        human = [m for m in conv.messages if m.sender_role != SenderRole.SYSTEM]
+        pending = []
+        for m in reversed(human):
+            if m.sender_role != SenderRole.PLAYER:
+                break
+            pending.append(m.message_id)
+        if pending:
+            found.append(
+                RuleErrorOut(
+                    code="waiting_past_sla",
+                    evidence_message_ids=[pending[-1]],
+                    hours=round(task.wait_hours or 0.0, 1),
+                )
+            )
+    return found
 
 
 def list_queue(
@@ -147,6 +251,7 @@ def list_queue(
         .join(ConversationRow, ConversationRow.conversation_id == TaskRow.conversation_id)
         .join(PlayerRow, PlayerRow.player_id == ConversationRow.player_id)
         .outerjoin(AnalysisRow, AnalysisRow.id == TaskRow.analysis_id)
+        .options(selectinload(ConversationRow.messages))
     )
     if status:
         query = query.where(TaskRow.status.in_([s.value for s in status]))
@@ -170,11 +275,13 @@ def list_queue(
             continue
         result = _result(analysis)
         sla_hours = sla.response_hours_for(conv.channel)
+        state = task_reply_state(task)
+        waiting = state in (ReplyState.MANAGER, ReplyState.SPECIALIST)
         items.append(
             QueueItem(
                 task_id=task.id,
                 conversation_id=conv.conversation_id,
-                player=_player(player),
+                player=_player(player, policy),
                 channel=conv.channel,
                 status=task.status,
                 priority=task.priority,
@@ -183,8 +290,9 @@ def list_queue(
                 sentiment=result.get("sentiment"),
                 summary=result.get("summary"),
                 next_action=task.next_action,
-                wait_hours=task.wait_hours if task.awaiting_reply else None,
-                awaiting_reply=task.awaiting_reply,
+                wait_hours=task.wait_hours if waiting else None,
+                awaiting_reply=waiting,
+                reply_state=state,
                 overdue=late,
                 sla_hours=sla_hours,
                 sla_lane=sla_lane(
@@ -197,10 +305,13 @@ def list_queue(
                     reply_needed=not any(
                         r.get("code") == "sla.no_reply_needed" for r in task.reasons
                     ),
+                    escalated=task.route != Route.MANAGER,
                 ),
                 alerts=alerts_of(task),
                 requires_review=task.requires_review,
                 quality_flags=task.quality_flags,
+                manager_errors=_manager_errors(result),
+                rule_errors=_rule_errors(to_domain(conv), task, late, policy),
                 reasons=[ReasonOut(**r) for r in task.reasons],
                 last_message_at=conv.last_message_at,
                 simulated=bool(analysis and analysis.simulated),
@@ -228,8 +339,12 @@ def conversation_detail(
     as_of = _as_of(session) or conv.last_message_at
     facts = compute_facts(conv, as_of, policy.sla)
     result = _result(analysis)
+    errors = _manager_errors(result)
     evidence = set(result.get("evidence_message_ids", []))
-    pending = set(facts.pending_message_ids)
+    evidence.update(i for e in errors for i in e.evidence_message_ids)
+    state = task_reply_state(task) if task is not None else None
+    owed = facts.awaiting_reply if state is None else state != ReplyState.NO_REPLY_NEEDED
+    pending = set(facts.pending_message_ids) if owed else set()
 
     analysis_out = None
     if analysis is not None:
@@ -243,6 +358,7 @@ def conversation_detail(
             confidence=result.get("confidence"),
             safety_flag=result.get("safety_flag"),
             needs_escalation=result.get("needs_escalation"),
+            manager_errors=errors,
             model=analysis.model,
             simulated=analysis.simulated,
             label=_label(analysis.simulated),
@@ -254,7 +370,7 @@ def conversation_detail(
     return ConversationDetail(
         conversation_id=conv.conversation_id,
         channel=conv.channel,
-        player=_player(player),
+        player=_player(player, policy),
         messages=[
             MessageOut(
                 message_id=m.message_id,
@@ -270,10 +386,12 @@ def conversation_detail(
         task=task_out,
         facts=FactsOut(
             as_of=facts.as_of,
-            awaiting_reply=facts.awaiting_reply,
-            wait_hours=facts.wait_hours,
+            awaiting_reply=facts.awaiting_reply and owed,
+            wait_hours=facts.wait_hours if owed else None,
             response_sla_hours=facts.response_sla_hours,
-            sla_breached=facts.sla_breached,
+            sla_breached=facts.sla_breached and owed,
+            reply_state=state,
+            raw_wait_hours=facts.wait_hours,
             median_response_minutes=facts.median_response_minutes,
         ),
     )

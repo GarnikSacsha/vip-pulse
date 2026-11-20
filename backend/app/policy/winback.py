@@ -12,7 +12,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict
 
 from app.policy.config import PolicyConfig
-from app.policy.player import _number, _usd
+from app.policy.player import _number, _usd, is_deposit_spike
 from app.policy.priority import Reason
 from app.schemas.domain import Player
 
@@ -34,6 +34,74 @@ class WinbackItem(BaseModel):
     last_contact_days: int | None  # None: no conversation at all
     deposits_30d_usd: float | None
     deposits_prev_30d_usd: float | None
+    # An open conversation the player is waiting on: answer it before any win-back message.
+    open_request: "OpenRequest | None" = None
+
+
+class OpenRequest(BaseModel):
+    """The player's most urgent active conversation in the queue."""
+
+    model_config = ConfigDict(frozen=True)
+
+    conversation_id: str
+    category: str | None
+    priority: str
+    wait_hours: float | None  # None: the manager wrote last
+
+
+OPEN_REQUEST_ACTION = (
+    "Сначала закрыть открытый запрос игрока в очереди, потом писать про возвращение."
+)
+
+
+class BirthdayItem(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    player: Player
+    birthday: date
+    days: int  # from the data date to the birthday: 0 today, negative = already passed
+    next_action: str
+
+
+BIRTHDAY_ACTION = "Поздравить лично, без бонуса и промо."
+# An introduction whose birthday is in the window: one hint instead of two blocks.
+BIRTHDAY_INTRO_ACTION = "Повод познакомиться — поздравить, без бонуса и промо."
+
+
+def _birthday_in(year: int, born: date) -> date:
+    # 29 February is celebrated on 28 February in a common year.
+    try:
+        return born.replace(year=year)
+    except ValueError:
+        return date(year, 2, 28)
+
+
+def birthdays(players: Iterable[Player], as_of: datetime, cfg: PolicyConfig) -> list[BirthdayItem]:
+    """Players whose birthday is within ± the window of the data date (not the system clock).
+
+    Restricted accounts are left out, like in the win-back list.
+    """
+    window = cfg.winback.birthday_window_days
+    today = as_of.date()
+    found: list[BirthdayItem] = []
+    for player in players:
+        attrs = player.attributes
+        status = str(attrs.get("account_status") or "").strip().lower()
+        born = _day(attrs.get("birthday"))
+        if born is None or status in cfg.player.restricted_statuses:
+            continue
+        # The nearest occurrence: last year, this year or next year (handles new year).
+        days = min(
+            ((_birthday_in(today.year + shift, born) - today).days for shift in (-1, 0, 1)),
+            key=abs,
+        )
+        if abs(days) <= window:
+            found.append(
+                BirthdayItem(player=player, birthday=born, days=days, next_action=BIRTHDAY_ACTION)
+            )
+    # Upcoming first (soonest), then the ones just passed (most recent first).
+    found.sort(key=lambda b: (b.days < 0, abs(b.days), b.player.player_id))
+    return found
 
 
 def _day(value: object) -> date | None:
@@ -61,6 +129,8 @@ def winback(
     as_of: datetime,
     cfg: PolicyConfig,
     excluded: set[str] | frozenset[str] = frozenset(),
+    open_requests: dict[str, OpenRequest] | None = None,
+    birthday_ids: set[str] | frozenset[str] = frozenset(),
 ) -> list[WinbackItem]:
     """`excluded`: players with a risk signal in their conversations (e.g. responsible gaming)."""
     rules = cfg.winback
@@ -83,7 +153,7 @@ def winback(
 
         now = _number(attrs.get("deposits_30d_usd"))
         before = _number(attrs.get("deposits_prev_30d_usd"))
-        if now is not None and before and now >= before * cfg.player.deposit_spike_ratio:
+        if now is not None and before and is_deposit_spike(now, before, cfg):
             continue  # a sharp rise is a harm-risk signal, not a reason to reach out with promo
         if now is not None and before:
             if now == 0:
@@ -120,12 +190,20 @@ def winback(
         if tier is None:
             continue
         game = str(attrs.get("favorite_game") or "").strip() or None
+        request = (open_requests or {}).get(player.player_id)
         items.append(
             WinbackItem(
                 player=player,
                 tier=tier,
                 reasons=tuple(reasons),
-                next_action=_action(tier, game),
+                next_action=(
+                    OPEN_REQUEST_ACTION
+                    if request
+                    else BIRTHDAY_INTRO_ACTION
+                    if tier == Tier.INTRODUCE and player.player_id in birthday_ids
+                    else _action(tier, game)
+                ),
+                open_request=request,
                 last_login_days=login_days,
                 last_contact_days=contact_days,
                 deposits_30d_usd=now,

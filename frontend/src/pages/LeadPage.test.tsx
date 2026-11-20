@@ -16,7 +16,7 @@ const rg = queueItem({
   wait_hours: null,
   awaiting_reply: false,
   overdue: false,
-  sla_lane: "ok",
+  sla_lane: "specialist",
 });
 const soon = queueItem({
   task_id: 5,
@@ -44,7 +44,7 @@ describe("team lead page", () => {
     const tiles = within(screen.getByRole("list", { name: "Ключевые показатели" }));
     expect(tiles.getByText("Просрочен ответ").closest("li")).toHaveTextContent("1");
     expect(tiles.getByText("Эскалации").closest("li")).toHaveTextContent("2");
-    expect(tiles.getByText("Ошибки менеджеров").closest("li")).toHaveTextContent("1");
+    expect(tiles.getByText("Диалоги с ошибками").closest("li")).toHaveTextContent("1");
   });
 
   it("lists workload per manager with a link to their queue", async () => {
@@ -103,7 +103,7 @@ describe("team lead page: SLA lanes", () => {
     expect(atRisk).toHaveTextContent("осталось 30 мин");
 
     expect(lane(/^Ждёт/)).toHaveAccessibleName("Ждёт · 0");
-    expect(within(lane(/^Всё ок/)).getByText(/Demo Player 004/)).toBeInTheDocument();
+    expect(within(lane(/^У специалиста/)).getByText(/Demo Player 004/)).toBeInTheDocument();
   });
 });
 
@@ -118,3 +118,178 @@ describe("team lead page: personal contact", () => {
   });
 });
 
+
+describe("team lead page: lanes and labels agree", () => {
+  it("puts escalated work in «У специалиста» and never labels «Всё ок» as running out", async () => {
+    const specialist = queueItem({
+      task_id: 11,
+      conversation_id: "d-011",
+      player: { player_id: "p-011", display_name: "Demo Player 011", manager_id: "mgr-02", segment: "gold" },
+      route: "rg_specialist",
+      category: "responsible_gaming",
+      wait_hours: 173,
+      overdue: false,
+      sla_lane: "specialist",
+    });
+    const thanks = queueItem({
+      task_id: 12,
+      conversation_id: "d-012",
+      player: { player_id: "p-012", display_name: "Demo Player 012", manager_id: "mgr-01", segment: "gold" },
+      priority: "P3",
+      wait_hours: 143,
+      overdue: false,
+      sla_lane: "ok",
+    });
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [specialist, thanks] });
+    renderLead();
+    const board = await screen.findByRole("region", { name: "SLA по активным диалогам" });
+    const lane = (name: RegExp) => within(board).getByRole("region", { name });
+
+    const withSpecialist = lane(/^У специалиста/);
+    expect(within(withSpecialist).getByText(/Demo Player 011/)).toBeInTheDocument();
+    expect(withSpecialist).toHaveTextContent("игрок ждёт 7 д 5 ч");
+
+    const ok = lane(/^Всё ок/);
+    expect(within(ok).getByText(/Demo Player 012/)).toBeInTheDocument();
+    expect(ok).toHaveTextContent("не ждёт ответа");
+    expect(board).not.toHaveTextContent("SLA на исходе");
+  });
+});
+
+describe("team lead page: manager mistakes", () => {
+  it("lists mistakes by manager with their type and a link to the message", async () => {
+    const promise = queueItem({
+      task_id: 21,
+      conversation_id: "d-001",
+      status: "resolved",
+      manager_errors: [{ code: "broken_promise", evidence_message_ids: ["m-001-2"] }],
+    });
+    const bonus = queueItem({
+      task_id: 22,
+      conversation_id: "d-004",
+      player: { player_id: "p-004", display_name: "Demo Player 004", manager_id: "mgr-02", segment: "platinum" },
+      quality_flags: ["offer_to_vulnerable_player"],
+    });
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [promise, bonus] });
+    renderLead();
+    const panel = await screen.findByRole("region", { name: /Ошибки менеджеров/ });
+    const mgr01 = within(panel).getByRole("list", { name: "mgr-01" });
+    expect(within(mgr01).getByRole("link", { name: /Обещал вернуться и не вернулся/ })).toHaveAttribute(
+      "href",
+      "/queue/d-001?msg=m-001-2",
+    );
+    const mgr02 = within(panel).getByRole("list", { name: "mgr-02" });
+    expect(within(mgr02).getByRole("link", { name: /Бонус уязвимому игроку/ })).toHaveAttribute("href", "/queue/d-004");
+  });
+
+  it("shows the number of mistakes per manager in the workload table", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [late] });
+    renderLead();
+    const table = await screen.findByRole("table", { name: "Нагрузка по менеджерам" });
+    expect(within(table).getByRole("columnheader", { name: "Диалоги с ошибками" })).toBeInTheDocument();
+    const row = within(table).getByRole("row", { name: /mgr-02/ });
+    expect(row).toHaveTextContent("1 (ошибок: 1)");
+  });
+});
+
+describe("team lead page: review group wording", () => {
+  it("names every cause of a manual review", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [rg] });
+    renderLead();
+    const group = await screen.findByRole("region", { name: /Нужна ручная проверка/ });
+    expect(group).toHaveTextContent(/правило безопасности/);
+  });
+});
+
+describe("team lead page: overdue means the «Горит» lane", () => {
+  it("says escalations are not in «Просрочен ответ»", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [late] });
+    renderLead();
+    const tiles = within(await screen.findByRole("list", { name: "Ключевые показатели" }));
+    expect(tiles.getByText("Просрочен ответ").closest("li")).toHaveTextContent("колонка «Горит», без эскалаций");
+  });
+});
+
+describe("team lead page: mistakes counted by code", () => {
+  it("lists late replies and current SLA breaches with a link to the player's message", async () => {
+    const item = queueItem({
+      task_id: 41,
+      conversation_id: "d-001",
+      rule_errors: [
+        { code: "late_reply", evidence_message_ids: ["m-001-1", "m-001-2"], hours: 5 },
+        { code: "waiting_past_sla", evidence_message_ids: ["m-001-3"], hours: 27 },
+      ],
+    });
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [item] });
+    renderLead();
+    const mine = within(await screen.findByRole("region", { name: /Ошибки менеджеров/ })).getByRole("list", { name: "mgr-01" });
+    const late = within(mine).getByRole("link", { name: /Ответ позже SLA канала: 5 ч/ });
+    expect(late).toHaveAttribute("href", "/queue/d-001?msg=m-001-1");
+    expect(late).toHaveTextContent("(код)");
+    expect(within(mine).getByRole("link", { name: /Игрок ждёт дольше SLA: 1 д 3 ч/ })).toHaveAttribute(
+      "href",
+      "/queue/d-001?msg=m-001-3",
+    );
+  });
+});
+
+describe("team lead page: conversations with mistakes vs mistakes", () => {
+  const twoMistakes = queueItem({
+    task_id: 61,
+    conversation_id: "d-001",
+    manager_errors: [{ code: "canned_reply", evidence_message_ids: ["m-001-2"] }],
+    rule_errors: [{ code: "waiting_past_sla", evidence_message_ids: ["m-001-3"], hours: 27 }],
+  });
+  const oneMistake = queueItem({
+    task_id: 62,
+    conversation_id: "d-004",
+    player: { player_id: "p-004", display_name: "Demo Player 004", manager_id: "mgr-02", segment: "platinum" },
+    quality_flags: ["offer_to_vulnerable_player"],
+  });
+
+  it("names the tile «Диалоги с ошибками» out of all conversations", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [twoMistakes, oneMistake] });
+    renderLead();
+    const tiles = within(await screen.findByRole("list", { name: "Ключевые показатели" }));
+    const tile = tiles.getByText("Диалоги с ошибками").closest("li");
+    expect(tile).toHaveTextContent(`из ${overview.totals.total} диалогов, включая закрытые`);
+    expect(tiles.queryByText("Ошибки менеджеров")).not.toBeInTheDocument();
+  });
+
+  it("groups mistakes by manager, then by conversation, each linked to its message", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [twoMistakes, oneMistake] });
+    renderLead();
+    const panel = await screen.findByRole("region", { name: /Ошибки менеджеров/ });
+    expect(panel).toHaveAccessibleName("Ошибки менеджеров · 3 в 2 диалогах");
+    expect(panel).toHaveTextContent("Бонус уязвимому игроку и опоздания по SLA считает код");
+    const conv = within(within(panel).getByRole("list", { name: "mgr-01" })).getByRole("listitem");
+    expect(conv).toHaveTextContent("Demo Player 001 · 2 ошибки");
+    expect(within(conv).getByRole("link", { name: /Шаблонная отписка/ })).toHaveAttribute("href", "/queue/d-001?msg=m-001-2");
+    expect(within(conv).getByRole("link", { name: /Игрок ждёт дольше SLA/ })).toHaveAttribute("href", "/queue/d-001?msg=m-001-3");
+  });
+
+  it("compares managers by conversations with mistakes, mistakes alongside", async () => {
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [twoMistakes] });
+    renderLead();
+    const table = await screen.findByRole("table", { name: "Нагрузка по менеджерам" });
+    expect(within(table).getByRole("columnheader", { name: /Диалоги с ошибками/ })).toBeInTheDocument();
+    const row = within(table).getByRole("row", { name: /mgr-01/ });
+    expect(row).toHaveTextContent("1 (ошибок: 2)");
+  });
+});
+
+describe("team lead page: bonus before the security check", () => {
+  it("lists it as counted by code with a link to the manager's message", async () => {
+    const item = queueItem({
+      task_id: 71,
+      conversation_id: "d-071",
+      route: "security",
+      rule_errors: [{ code: "offer_before_security_check", evidence_message_ids: ["m-071-2"], hours: null }],
+    });
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [item] });
+    renderLead();
+    const panel = await screen.findByRole("region", { name: /Ошибки менеджеров/ });
+    const link = within(panel).getByRole("link", { name: "Бонус до проверки безопасности (код)" });
+    expect(link).toHaveAttribute("href", "/queue/d-071?msg=m-071-2");
+  });
+});

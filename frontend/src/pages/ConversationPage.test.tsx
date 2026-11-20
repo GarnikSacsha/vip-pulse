@@ -80,9 +80,11 @@ describe("conversation page", () => {
     expect(items).toHaveLength(3);
     expect(items[0]).toHaveTextContent("Игрок");
     expect(items[0]).toHaveTextContent("Вывел 5000€, до сих пор не пришло.");
-    expect(items[0]).toHaveTextContent("Основание вывода");
+    expect(items[0]).toHaveTextContent("Цитата для разбора");
     expect(items[1]).toHaveTextContent("Менеджер");
-    expect(items[1]).not.toHaveTextContent("Основание вывода");
+    expect(items[1]).not.toHaveTextContent("Цитата для разбора");
+    // «вывод» reads as a payout in iGaming: the old label must not come back.
+    expect(document.body).not.toHaveTextContent("Основание вывода");
     expect(items[2]).toHaveTextContent("Ждёт ответа");
   });
 
@@ -97,7 +99,8 @@ describe("conversation page", () => {
     expect(screen.getByText("Игрок ждёт вывод больше суток, менеджер не вернулся с ответом.")).toBeInTheDocument();
     expect(screen.getByText("Источник: эвристика fake, без модели")).toBeInTheDocument();
     expect(screen.getByText("1 д 3 ч")).toBeInTheDocument();
-    expect(screen.getByText("SLA 4 ч нарушен")).toBeInTheDocument();
+    expect(screen.getByText("SLA канала")).toBeInTheDocument();
+    expect(screen.getByText("4 ч, нарушен")).toBeInTheDocument();
   });
 
   it("warns not to offer bonuses in responsible-gaming cases", async () => {
@@ -177,6 +180,7 @@ describe("conversation page", () => {
           confidence: null,
           safety_flag: null,
           needs_escalation: null,
+          manager_errors: [],
           model: "gemini:gemini-2.5-flash",
           simulated: false,
           label: "AI",
@@ -337,3 +341,81 @@ describe("conversation pane: manager alerts", () => {
   });
 });
 
+
+describe("conversation pane: manager mistakes", () => {
+  it("shows mistakes found by the analysis with a pill to the message", async () => {
+    const base = detail();
+    serve({
+      ...base,
+      messages: base.messages.map((m) => (m.message_id === "m-001-2" ? { ...m, is_evidence: true } : m)),
+      analysis: base.analysis && {
+        ...base.analysis,
+        manager_errors: [{ code: "broken_promise", evidence_message_ids: ["m-001-2"] }],
+      },
+    });
+    renderPage();
+    const mistakes = await screen.findByRole("list", { name: "Ошибки менеджера" });
+    expect(within(mistakes).getByText("Обещал вернуться и не вернулся")).toBeInTheDocument();
+    expect(within(mistakes).getByRole("button", { name: /Сообщение 2/ })).toBeInTheDocument();
+  });
+
+  it("highlights the message named in the link", async () => {
+    serve(detail());
+    render(
+      <MemoryRouter initialEntries={["/conversations/d-001?msg=m-001-2"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    const timeline = await screen.findByRole("list", { name: "Переписка" });
+    expect(timeline.querySelector("#msg-m-001-2")).toHaveAttribute("data-highlighted", "true");
+  });
+});
+
+describe("conversation pane: wording", () => {
+  it("names the priority as «Приоритет: критичный»", async () => {
+    serve(detail());
+    renderPage();
+    expect(await screen.findByText("Приоритет: критичный")).toBeInTheDocument();
+  });
+});
+
+describe("conversation pane: one source for waiting", () => {
+  it("shows «no reply needed» as an AI fact and never a breached SLA", async () => {
+    const base = detail();
+    serve({
+      ...base,
+      messages: base.messages.map((m) => ({ ...m, is_pending: false })),
+      facts: {
+        ...base.facts,
+        awaiting_reply: false,
+        wait_hours: null,
+        sla_breached: false,
+        reply_state: "no_reply_needed",
+        raw_wait_hours: 189,
+      },
+    });
+    renderPage();
+    const facts = await screen.findByRole("region", { name: "Факты" });
+    expect(facts).toHaveTextContent("Ответ не требуется (AI)");
+    expect(facts).toHaveTextContent("последнее сообщение игрока 7 д 21 ч назад");
+    expect(facts).not.toHaveTextContent("нарушен");
+  });
+});
+
+describe("conversation pane: escalated case in the manager role", () => {
+  it("gives the manager a neutral step and leaves the full analysis to the lead", async () => {
+    localStorage.setItem("vip-pulse-role", "manager:mgr-01");
+    const base = detail();
+    serve({
+      ...base,
+      task: base.task && { ...base.task, route: "rg_specialist", next_action: "Менеджер нарушил правила, передать специалисту." },
+      analysis: base.analysis && { ...base.analysis, summary: "Менеджер грубо нарушил правила ответственной игры." },
+    });
+    renderPage();
+    const step = await screen.findByRole("region", { name: "Следующий шаг" });
+    expect(step).toHaveTextContent("Передано специалисту: не писать игроку о бонусах и акциях; подтвердить получение");
+    expect(document.body).not.toHaveTextContent("грубо нарушил");
+    expect(screen.getByText(/Полный разбор видит тимлид/)).toBeInTheDocument();
+    localStorage.clear();
+  });
+});

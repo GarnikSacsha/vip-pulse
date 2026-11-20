@@ -46,12 +46,21 @@ function OverviewBody({ data }: { data: Overview }) {
           { label: "Критичные", value: t.critical, tone: t.critical ? "alert" : "plain", hint: "приоритет P0" },
           {
             label: "Ответ в рамках SLA",
-            value: t.awaiting_reply ? `${withinSla} из ${t.awaiting_reply}` : "—",
-            hint: "среди ждущих ответа",
+            value: !t.awaiting_reply
+              ? "—"
+              : withinSla === 0
+                ? `Все ${t.awaiting_reply} ждущих — просрочены`
+                : `${withinSla} из ${t.awaiting_reply} ответят в срок`,
+            hint: "ждут менеджера; эскалированные к специалисту не входят",
             tone: t.overdue ? "alert" : "plain",
           },
           { label: "Сигналы безопасности", value: t.escalated, hint: "ответственная игра и взломы" },
-          { label: "Ошибки менеджеров", value: t.quality_issues, tone: t.quality_issues ? "alert" : "plain" },
+          {
+            label: "Диалоги с ошибками",
+            value: t.quality_issues,
+            hint: `из ${t.total} диалогов, включая закрытые`,
+            tone: t.quality_issues ? "alert" : "plain",
+          },
         ]}
       />
 

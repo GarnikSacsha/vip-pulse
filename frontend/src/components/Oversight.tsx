@@ -104,7 +104,11 @@ export function CompactItem({ item }: { item: QueueItem }) {
         </div>
       </div>
       <span className={`shrink-0 text-sm tabular-nums ${item.overdue ? "font-medium text-danger" : "text-muted"}`}>
-        {item.awaiting_reply ? formatWait(item.wait_hours) : "не ждёт"}
+        {item.awaiting_reply
+          ? formatWait(item.wait_hours)
+          : item.reply_state === "no_reply_needed"
+            ? "ответ не нужен"
+            : "не ждёт"}
       </span>
     </Link>
   );

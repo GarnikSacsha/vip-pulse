@@ -5,7 +5,8 @@ import type { Meta, Priority, QueueFilters, QueueItem, TaskStatus } from "../api
 import { PriorityBadge, Tag } from "../components/Badges";
 import { Pulse } from "../components/Pulse";
 import { formatWait } from "../lib/format";
-import { CATEGORY_LABEL, CHANNEL_LABEL, ROUTE_LABEL, STATUS_LABEL, alertText, qualityFlagLabel } from "../lib/labels";
+import { CATEGORY_LABEL, CHANNEL_LABEL, HANDED_OVER_STEP, ROUTE_LABEL, STATUS_LABEL, alertText, qualityFlagLabel } from "../lib/labels";
+import { managerOf, useRole } from "../lib/role";
 import { useApi } from "../lib/useApi";
 
 type View = "active" | "all" | "resolved" | "no_action";
@@ -25,6 +26,11 @@ const VIEWS: ViewDef[] = [
   { id: "no_action", label: "Без действий", statuses: ["no_action"] },
 ];
 const PRIORITIES: Priority[] = ["P0", "P1", "P2", "P3"];
+
+function managerCount(view: ViewDef, items: QueueItem[] | null): number | null {
+  if (!items) return null;
+  return view.statuses ? items.filter((i) => view.statuses?.includes(i.status)).length : items.length;
+}
 
 function viewCount(view: ViewDef, meta: Meta | null): number | null {
   if (!meta) return null;
@@ -68,7 +74,9 @@ export function QueuePage() {
   const [params, setParams] = useSearchParams();
   const view = VIEWS.find((v) => v.id === params.get("view")) ?? ACTIVE_VIEW;
   const priority = PRIORITIES.find((p) => p === params.get("priority"));
-  const manager = params.get("manager");
+  // A manager role sees only their own players (demo filter, not authorisation).
+  const roleManager = managerOf(useRole().role);
+  const manager = roleManager ?? params.get("manager");
 
   const filters: QueueFilters = {
     ...(view.statuses ? { status: view.statuses } : {}),
@@ -76,6 +84,17 @@ export function QueuePage() {
     ...(manager ? { manager: [manager] } : {}),
   };
   const queue = useApi(() => api.queue(filters), JSON.stringify(filters));
+  // All of one manager's items, for the tab counts (the department counts come from meta).
+  // With a manager or priority filter the tab counts come from the filtered items, all statuses;
+  // otherwise from the department-wide counts in meta.
+  const scoped = Boolean(manager || priority);
+  const mine = useApi(
+    () =>
+      scoped
+        ? api.queue({ ...(priority ? { priority: [priority] } : {}), ...(manager ? { manager: [manager] } : {}) })
+        : Promise.resolve(null),
+    `scoped:${manager ?? ""}:${priority ?? ""}:${queue.data?.length ?? ""}`,
+  );
 
   // j / k: next and previous conversation, wherever the focus is, except inside text fields.
   const items = queue.data;
@@ -160,7 +179,10 @@ export function QueuePage() {
               <kbd className="font-mono">j</kbd>/<kbd className="font-mono">k</kbd> — следующий и предыдущий.
             </span>
           </p>
-          {manager && (
+          <p className="mt-0.5 text-xs text-muted">
+            Кружок: пустой — игрок не ждёт, кольцо заполняется к сроку SLA канала, закрашен с точкой — SLA нарушен.
+          </p>
+          {manager && !roleManager && (
             <button
               type="button"
               onClick={clearManager}
@@ -172,11 +194,12 @@ export function QueuePage() {
             </button>
           )}
 
-          <div role="tablist" className="mt-3 flex gap-4 overflow-x-auto border-b border-line text-sm">
+          <div role="tablist" className="mt-3 flex flex-wrap gap-x-2.5 gap-y-1 border-b border-line text-[13px]">
             {VIEWS.map((v) => {
               const isSelected = v.id === view.id;
               // Meta counts the whole department: wrong on one manager's queue, so hidden there.
-              const count = manager ? null : viewCount(v, meta);
+              // Meta counts the department; a filtered queue is counted over its own items.
+              const count = scoped ? managerCount(v, mine.data) : viewCount(v, meta);
               return (
                 <button
                   key={v.id}
@@ -184,7 +207,7 @@ export function QueuePage() {
                   type="button"
                   aria-selected={isSelected}
                   onClick={() => update({ view: v.id })}
-                  className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 pb-2 ${
+                  className={`-mb-px flex shrink-0 items-center gap-1 border-b-2 pb-2 ${
                     isSelected ? "border-ink font-medium text-ink" : "border-transparent text-muted hover:text-ink"
                   }`}
                 >
@@ -290,6 +313,7 @@ const ROW_ACCENT: Record<Priority, string> = {
 };
 
 function QueueRow({ item, search }: { item: QueueItem; search: string }) {
+  const roleManager = managerOf(useRole().role);
   const name = item.player.display_name ?? item.player.player_id;
   return (
     <NavLink
@@ -336,7 +360,9 @@ function QueueRow({ item, search }: { item: QueueItem; search: string }) {
           )}
           {item.simulated && <Tag>демо</Tag>}
         </div>
-        {item.next_action && <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted">{item.next_action}</p>}
+        <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted">
+          {roleManager && item.route !== "manager" ? HANDED_OVER_STEP : (item.next_action ?? "Действий не требуется")}
+        </p>
       </div>
 
       <div className="flex flex-col items-end gap-1.5">
@@ -346,7 +372,11 @@ function QueueRow({ item, search }: { item: QueueItem; search: string }) {
             item.sla_lane === "breached" ? "font-medium text-danger" : item.awaiting_reply ? "text-ink" : "text-muted"
           }`}
         >
-          {item.awaiting_reply ? formatWait(item.wait_hours) : "не ждёт"}
+          {item.awaiting_reply
+            ? formatWait(item.wait_hours)
+            : item.reply_state === "no_reply_needed"
+              ? "не требует ответа (AI)"
+              : "ход за игроком"}
         </span>
       </div>
     </NavLink>

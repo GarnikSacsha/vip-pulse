@@ -1,13 +1,14 @@
 """Response models of the HTTP API: the contract the browser UI is built against."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
 from app.policy.priority import Route
-from app.policy.sla import SlaLane
+from app.policy.sla import ReplyState, SlaLane
 from app.schemas.analysis import (
     Category,
+    ManagerError,
     Priority,
     ProcessingStatus,
     SafetyFlag,
@@ -37,6 +38,34 @@ class Meta(BaseModel):
     as_of: datetime | None  # reference "now" of the dataset; None when nothing is imported
     provider: ProviderInfo
     counts: Counts
+    managers: list[str]  # distinct managers from players.csv, for the demo role switcher
+
+
+class PlayerProfile(BaseModel):
+    """Profile columns of players.csv for the player card. Missing or unreadable = None."""
+
+    account_status: str | None = None  # active | limit_set | self_excluded
+    brand: str | None = None
+    language: str | None = None
+    geo: str | None = None
+    deposits_30d_usd: float | None = None
+    deposits_30d_count: int | None = None
+    deposits_prev_30d_usd: float | None = None
+    deposits_prev_30d_count: int | None = None
+    last_deposit_at: str | None = None
+    failed_deposits_7d: int | None = None
+    withdrawals_30d_usd: float | None = None
+    last_withdrawal_at: str | None = None
+    pending_withdrawal_usd: float | None = None
+    bonuses_30d_usd: float | None = None
+    bonuses_30d_count: int | None = None
+    last_login_at: str | None = None
+    birthday: str | None = None
+    favorite_game: str | None = None
+    # Derived in code: change of the 30-day deposits against the 30 days before, and whether it
+    # fell below `player.deposit_drop_share` of them (thresholds.yaml).
+    deposits_change_pct: float | None = None
+    deposit_drop: bool | None = None
 
 
 class PlayerOut(BaseModel):
@@ -47,11 +76,28 @@ class PlayerOut(BaseModel):
     # Optional profile columns; an adapter maps its source columns to these names.
     country: str | None = None
     registered_at: str | None = None
+    profile: PlayerProfile = PlayerProfile()
 
 
 class ReasonOut(BaseModel):
     code: str
     text: str
+
+
+class OpenRequestOut(BaseModel):
+    """The player's most urgent active conversation: answer it before anything else."""
+
+    conversation_id: str
+    category: Category | None
+    priority: Priority
+    wait_hours: float | None  # None: the manager wrote last
+
+
+class BirthdayOut(BaseModel):
+    player: PlayerOut
+    birthday: date
+    days: int  # from the data date: 0 today, negative = already passed
+    next_action: str
 
 
 class WinbackOut(BaseModel):
@@ -67,6 +113,17 @@ class WinbackOut(BaseModel):
     deposits_prev_30d_usd: float | None
     favorite_game: str | None
     latest_conversation_id: str | None
+    open_request: OpenRequestOut | None = None
+
+
+class RuleErrorOut(BaseModel):
+    """A manager mistake counted by code from message times (decision 0019), not by the model."""
+
+    code: str  # late_reply | waiting_past_sla | offer_before_security_check (0021)
+    # late_reply / waiting_past_sla: the player message first; offer_before_security_check: the
+    # manager message that credited or promised the bonus.
+    evidence_message_ids: list[str]
+    hours: float | None  # None when time is not the point
 
 
 class QueueItem(BaseModel):
@@ -81,16 +138,19 @@ class QueueItem(BaseModel):
     sentiment: Sentiment | None  # the player's tone, for the dossier trend; None when failed
     summary: str | None
     next_action: str | None
-    wait_hours: float | None
-    awaiting_reply: bool
+    wait_hours: float | None  # only while someone owes the player a reply
+    awaiting_reply: bool  # the manager or a specialist owes a reply (reply_state)
+    reply_state: ReplyState  # app.policy.sla: one source for every wait and overdue number
     # Active work (open / in progress) whose player waits longer than the channel's SLA.
     overdue: bool
     sla_hours: float  # the channel's response SLA under the current thresholds
-    sla_lane: SlaLane  # computed by app.policy.sla; "breached" exactly when overdue
+    sla_lane: SlaLane  # computed by app.policy.sla; escalated work is "specialist" (0013)
     # Alerts for the manager to act personally, e.g. "multi_account" (from reasons "alert.*").
     alerts: list[str]
     requires_review: bool
-    quality_flags: list[str]
+    quality_flags: list[str]  # mistakes counted by code, e.g. a bonus to a vulnerable player
+    manager_errors: list[ManagerError]  # mistakes found by the analysis, with evidence
+    rule_errors: list[RuleErrorOut]  # mistakes counted by code from message times
     reasons: list[ReasonOut]
     last_message_at: datetime
     simulated: bool
@@ -114,6 +174,7 @@ class AnalysisOut(BaseModel):
     confidence: float | None = None
     safety_flag: SafetyFlag | None = None
     needs_escalation: bool | None = None
+    manager_errors: list[ManagerError] = []
     model: str | None = None
     simulated: bool
     label: str
@@ -138,10 +199,12 @@ class TaskOut(BaseModel):
 
 class FactsOut(BaseModel):
     as_of: datetime
-    awaiting_reply: bool
-    wait_hours: float | None
+    awaiting_reply: bool  # someone owes the player a reply (reply_state)
+    wait_hours: float | None  # only while someone owes a reply
     response_sla_hours: float
-    sla_breached: bool
+    sla_breached: bool  # never when the analysis said no reply is needed
+    reply_state: ReplyState | None  # None before the first triage
+    raw_wait_hours: float | None  # time since the player's last message, whoever owes
     median_response_minutes: float | None
 
 
@@ -166,7 +229,8 @@ class OverviewTotals(BaseModel):
     overdue: int  # active and waiting longer than the channel SLA
     awaiting_reply: int  # active and the player spoke last
     escalated: int  # active and routed away from the manager (RG specialist, security)
-    quality_issues: int  # active with a manager-quality flag (e.g. offer to a vulnerable player)
+    # Conversations with at least one manager mistake (code or analysis), all statuses included.
+    quality_issues: int
     needs_review: int  # active and the analysis must be checked by a person
     resolved: int
     no_action: int
@@ -180,6 +244,8 @@ class ManagerLoad(BaseModel):
     critical: int
     overdue: int
     oldest_wait_hours: float | None  # longest wait among active items awaiting a reply
+    errors: int  # manager mistakes in all their conversations: code flags + analysis findings
+    error_conversations: int  # conversations with at least one mistake: the fair comparison
 
 
 class CategoryCount(BaseModel):

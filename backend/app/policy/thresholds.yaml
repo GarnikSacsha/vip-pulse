@@ -52,6 +52,17 @@ safety:
 
   # Another account or a shared payment card in a player's message. Not a block and not a
   # mistake: an alert that the manager must contact the player personally and clarify.
+  # Crediting words (assumption, extend as needed): with the offer words below they mark a
+  # manager crediting a bonus before the security check of a fraud or shared-account case.
+  credit_words:
+    - начислю
+    - начислим
+    - начислил
+    - начислила
+    - начислено
+    - накину
+    - закину
+
   multi_account:
     - другой аккаунт
     - другого аккаунта
@@ -91,11 +102,13 @@ player:
   pending_withdrawal_usd: 1000   # a payout this large is waiting = money problem
   deposit_drop_share: 0.5        # deposits fell below half of the previous 30 days = churn risk
   deposit_spike_ratio: 1.7       # deposits grew 1.7x or more = check for harm, human review
+  deposit_spike_min_usd: 1000    # ...and by at least $1 000 (assumption: $700 → $1 200 is not a spike)
 
 # Who to win back (page «Кого вернуть»). Restricted accounts are never listed.
 winback:
   silent_days: 14       # no login for this many days = went silent (urgent)
   no_contact_days: 21   # mention when the last conversation is older than this
+  birthday_window_days: 7  # birthday within ± this many days of the data date = reason to write
 
 # Words that make a message a promotional offer. Offers are never suggested to players with a
 # responsible-gaming signal, and a manager sending one is flagged as a quality issue.

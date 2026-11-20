@@ -5,7 +5,7 @@ import { Tag } from "../components/Badges";
 import { CompactItem, ErrorBox, KpiList, LoadingBlocks, Panel } from "../components/Oversight";
 import { Pulse } from "../components/Pulse";
 import { formatWait } from "../lib/format";
-import { CATEGORY_LABEL, SLA_LANE_LABEL } from "../lib/labels";
+import { CATEGORY_LABEL, MANAGER_ERROR_LABEL, RULE_ERROR_LABEL, SLA_LANE_LABEL, qualityFlagLabel } from "../lib/labels";
 import { useApi } from "../lib/useApi";
 
 interface Group {
@@ -31,15 +31,10 @@ const GROUPS: Group[] = [
     pick: (i) => i.route !== "manager",
   },
   {
-    id: "quality",
-    title: "Ошибки менеджеров",
-    description: "Например, бонус игроку с сигналом ответственной игры.",
-    pick: (i) => i.quality_flags.length > 0,
-  },
-  {
     id: "review",
     title: "Нужна ручная проверка",
-    description: "Автоматический разбор не выполнен или неуверен.",
+    description:
+      "Решение за человеком: сработало правило безопасности (ответственная игра, резкий рост депозитов), разбор не выполнен или модель не уверена.",
     pick: (i) => i.requires_review,
   },
 ];
@@ -47,8 +42,10 @@ const GROUPS: Group[] = [
 export function LeadPage() {
   const overview = useApi(() => api.overview(), "overview");
   const active = useApi(() => api.queue({ status: ["open", "in_progress"] }), "lead-active");
+  // Mistakes are about how a contact went, so closed conversations count too.
+  const all = useApi(() => api.queue({}), "lead-all");
 
-  const error = overview.error ?? active.error;
+  const error = overview.error ?? active.error ?? all.error;
   if (error) {
     return (
       <ErrorBox
@@ -56,6 +53,7 @@ export function LeadPage() {
         onRetry={() => {
           overview.reload();
           active.reload();
+          all.reload();
         }}
       />
     );
@@ -66,25 +64,26 @@ export function LeadPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Контроль команды</h1>
         <p className="mt-0.5 text-sm text-muted">
-          Что горит по SLA, что ушло в эскалацию и где менеджер ошибся. Только активные диалоги.
+          Что горит по SLA, что ушло в эскалацию и где менеджер ошибся. SLA и группы — по активным диалогам, ошибки менеджеров — по всем.
         </p>
       </div>
 
-      {!overview.data || !active.data ? (
+      {!overview.data || !active.data || !all.data ? (
         <LoadingBlocks />
       ) : (
-        <LeadBody overview={overview.data} active={active.data} />
+        <LeadBody overview={overview.data} active={active.data} all={all.data} />
       )}
     </section>
   );
 }
 
-function LeadBody({ overview, active }: { overview: Overview; active: QueueItem[] }) {
+function LeadBody({ overview, active, all }: { overview: Overview; active: QueueItem[]; all: QueueItem[] }) {
   return (
     <>
       <LeadKpis overview={overview} />
       <SlaBoard items={active} />
       <Workload managers={overview.managers} />
+      <ManagerMistakes items={all} />
       <div className="grid gap-4 lg:grid-cols-2">
         {GROUPS.map((g) => (
           <ExceptionGroup key={g.id} group={g} items={active.filter(g.pick)} />
@@ -94,15 +93,154 @@ function LeadBody({ overview, active }: { overview: Overview; active: QueueItem[
   );
 }
 
+interface Mistake {
+  key: string;
+  label: string;
+  source: "code" | "analysis";
+  item: QueueItem;
+  messageId: string | null;
+}
+
+function mistakesOf(item: QueueItem): Mistake[] {
+  const byCode: Mistake[] = item.quality_flags.map((f) => ({
+    key: `${item.task_id}:${f}`,
+    label: qualityFlagLabel(f),
+    source: "code",
+    item,
+    messageId: null,
+  }));
+  const byAnalysis: Mistake[] = item.manager_errors.map((e) => ({
+    key: `${item.task_id}:${e.code}`,
+    label: MANAGER_ERROR_LABEL[e.code],
+    source: "analysis",
+    item,
+    messageId: e.evidence_message_ids[0] ?? null,
+  }));
+  const byTiming: Mistake[] = item.rule_errors.map((e, i) => ({
+    key: `${item.task_id}:${e.code}:${i}`,
+    label: `${RULE_ERROR_LABEL[e.code] ?? e.code}${e.hours === null ? "" : `: ${formatWait(e.hours)}`}`,
+    source: "code",
+    item,
+    messageId: e.evidence_message_ids[0] ?? null,
+  }));
+  return [...byCode, ...byTiming, ...byAnalysis];
+}
+
+/** "1 ошибка", "3 ошибки", "5 ошибок". */
+export function mistakesWord(n: number): string {
+  const ten = n % 10;
+  const hundred = n % 100;
+  if (ten === 1 && hundred !== 11) return `${n} ошибка`;
+  if (ten >= 2 && ten <= 4 && (hundred < 12 || hundred > 14)) return `${n} ошибки`;
+  return `${n} ошибок`;
+}
+
+/**
+ * Manager mistakes by manager, then by conversation (decision 0020): one conversation can hold
+ * several mistakes, so managers are compared by conversations, with the mistakes listed inside.
+ */
+function ManagerMistakes({ items }: { items: QueueItem[] }) {
+  const groups = new Map<string, { item: QueueItem; mistakes: Mistake[] }[]>();
+  let total = 0;
+  for (const item of items) {
+    const mistakes = mistakesOf(item);
+    if (mistakes.length === 0) continue;
+    total += mistakes.length;
+    const manager = item.player.manager_id ?? "Без менеджера";
+    groups.set(manager, [...(groups.get(manager) ?? []), { item, mistakes }]);
+  }
+  const conversations = [...groups.values()].reduce((n, g) => n + g.length, 0);
+  return (
+    <Panel
+      id="group-quality"
+      title={
+        <>
+          Ошибки менеджеров{" "}
+          <span className="font-normal tabular-nums text-muted">
+            · {total} в {conversations} {conversations === 1 ? "диалоге" : "диалогах"}
+          </span>
+        </>
+      }
+      description="Бонус уязвимому игроку и опоздания по SLA считает код, остальное находит разбор переписки. Ссылка ведёт на сообщение. Включая закрытые диалоги."
+    >
+      {total === 0 ? (
+        <p className="px-4 py-4 text-sm text-muted">Нет</p>
+      ) : (
+        <div className="grid gap-x-6 gap-y-4 px-4 py-3 sm:grid-cols-2 xl:grid-cols-3">
+          {[...groups.entries()]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([manager, list]) => (
+              <div key={manager} className="min-w-0">
+                <h3 className="text-sm font-semibold">
+                  {manager}{" "}
+                  <span className="font-normal tabular-nums text-muted">· {list.length} диал.</span>
+                </h3>
+                <ul aria-label={manager} className="mt-1 space-y-2">
+                  {list.map(({ item, mistakes }) => {
+                    const name = item.player.display_name ?? item.player.player_id;
+                    return (
+                      <li key={item.task_id} className="text-sm">
+                        <p className="font-medium">
+                          {name} <span className="font-normal text-muted">· {mistakesWord(mistakes.length)}</span>
+                          {item.simulated && (
+                            <>
+                              {" "}
+                              <Tag>демо</Tag>
+                            </>
+                          )}
+                        </p>
+                        <p className="text-xs leading-relaxed">
+                          {mistakes.map((m, i) => (
+                            <span key={m.key}>
+                              {i > 0 && ", "}
+                              <Link
+                                to={`/queue/${encodeURIComponent(item.conversation_id)}${
+                                  m.messageId ? `?msg=${encodeURIComponent(m.messageId)}` : ""
+                                }`}
+                                className={`hover:underline ${m.source === "code" ? "text-danger" : ""}`}
+                              >
+                                {m.label}
+                                {m.source === "code" && (
+                                  <>
+                                    {" "}
+                                    <span className="text-muted">(код)</span>
+                                  </>
+                                )}
+                              </Link>
+                            </span>
+                          ))}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function LeadKpis({ overview }: { overview: Overview }) {
   const t = overview.totals;
   return (
     <KpiList
       items={[
         { label: "Активные", value: t.active, hint: `в работе ${t.in_progress}` },
-        { label: "Просрочен ответ", value: t.overdue, tone: t.overdue ? "alert" : "plain" },
+        {
+          label: "Просрочен ответ",
+          value: t.overdue,
+          hint: "колонка «Горит», без эскалаций",
+          tone: t.overdue ? "alert" : "plain",
+        },
         { label: "Эскалации", value: t.escalated, hint: "RG и безопасность" },
-        { label: "Ошибки менеджеров", value: t.quality_issues, tone: t.quality_issues ? "alert" : "plain" },
+        {
+          label: "Диалоги с ошибками",
+          value: t.quality_issues,
+          hint: `из ${t.total} диалогов, включая закрытые`,
+          tone: t.quality_issues ? "alert" : "plain",
+        },
         { label: "Нужна проверка", value: t.needs_review },
       ]}
     />
@@ -129,6 +267,7 @@ function Workload({ managers }: { managers: ManagerLoad[] }) {
                 <th className="px-3 py-2 text-right font-medium">Критичные</th>
                 <th className="px-3 py-2 text-right font-medium">Просрочено</th>
                 <th className="px-3 py-2 text-right font-medium">Дольше всех ждёт</th>
+                <th className="px-3 py-2 text-right font-medium">Диалоги с ошибками</th>
                 <th className="px-4 py-2 text-right font-medium">Всего</th>
               </tr>
             </thead>
@@ -152,6 +291,10 @@ function Workload({ managers }: { managers: ManagerLoad[] }) {
                   <td className="px-3 py-2.5 text-right">{m.critical}</td>
                   <td className={`px-3 py-2.5 text-right ${m.overdue ? "font-medium text-danger" : ""}`}>{m.overdue}</td>
                   <td className="px-3 py-2.5 text-right">{formatWait(m.oldest_wait_hours)}</td>
+                  <td className="px-3 py-2.5 text-right">
+                    <span className={m.error_conversations ? "font-medium text-danger" : ""}>{m.error_conversations}</span>
+                    <span className="text-xs text-muted"> (ошибок: {m.errors})</span>
+                  </td>
                   <td className="px-4 py-2.5 text-right text-muted">{m.total}</td>
                 </tr>
               ))}
@@ -193,7 +336,8 @@ const LANES: { lane: SlaLane; hint: string; tone: string }[] = [
   { lane: "breached", hint: "Ждут дольше SLA канала", tone: "text-danger" },
   { lane: "at_risk", hint: "Близко к порогу SLA", tone: "text-p1" },
   { lane: "waiting", hint: "Ждут, время ещё есть", tone: "text-ink" },
-  { lane: "ok", hint: "Ход за игроком", tone: "text-muted" },
+  { lane: "specialist", hint: "Эскалированы: ответственная игра, безопасность", tone: "text-ink" },
+  { lane: "ok", hint: "Ход за игроком или ответ не нужен", tone: "text-muted" },
 ];
 
 /** Active work by SLA lane. Lanes come from the policy thresholds, never from the model. */
@@ -206,7 +350,7 @@ function SlaBoard({ items }: { items: QueueItem[] }) {
         </h2>
         <p className="text-xs text-muted">Пороги — в thresholds.yaml, не решение модели.</p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         {LANES.map(({ lane, hint, tone }) => {
           const laneItems = items.filter((i) => i.sla_lane === lane);
           const headingId = `lane-${lane}`;
@@ -241,17 +385,28 @@ function SlaBoard({ items }: { items: QueueItem[] }) {
   );
 }
 
+/** The card label follows the lane, so a lane and its label can never disagree. */
 function timeLeft(item: QueueItem): string {
-  if (!item.awaiting_reply || item.wait_hours === null) return "не ждёт ответа";
-  const left = item.sla_hours - item.wait_hours;
-  if (item.sla_lane === "breached") return `просрочено на ${formatWait(Math.max(-left, 0))}`;
-  return left > 0 ? `осталось ${formatWait(left)}` : "SLA на исходе";
+  const wait = item.awaiting_reply ? item.wait_hours : null;
+  switch (item.sla_lane) {
+    case "ok":
+      return "не ждёт ответа";
+    case "specialist":
+      return wait === null ? "ход за игроком" : `игрок ждёт ${formatWait(wait)}`;
+    case "breached":
+      return `просрочено на ${formatWait(Math.max((wait ?? 0) - item.sla_hours, 0))}`;
+    default: {
+      const left = item.sla_hours - (wait ?? 0);
+      return left > 0 ? `осталось ${formatWait(left)}` : "SLA на исходе";
+    }
+  }
 }
 
 const BAR: Record<SlaLane, string> = {
   breached: "bg-danger",
   at_risk: "bg-p1",
   waiting: "bg-p2",
+  specialist: "bg-p2",
   ok: "bg-line",
 };
 
@@ -273,7 +428,7 @@ function LaneCard({ item }: { item: QueueItem }) {
         </div>
         <span className="text-xs font-semibold tabular-nums text-muted">{item.priority}</span>
       </div>
-      {item.awaiting_reply && (
+      {item.awaiting_reply && item.sla_lane !== "ok" && (
         <div aria-hidden="true" className="mt-2.5 h-1 overflow-hidden rounded-full bg-chip">
           <div className={`h-full rounded-full ${BAR[item.sla_lane]}`} style={{ width: `${share * 100}%` }} />
         </div>

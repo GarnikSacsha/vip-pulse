@@ -1,6 +1,8 @@
-import { NavLink, Navigate, Outlet, Route, Routes, useParams } from "react-router";
+import type { ReactNode } from "react";
+import { NavLink, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import { api } from "./api/client";
 import { formatDateTime } from "./lib/format";
+import { RoleProvider, parseRole, roleValue, sectionsOf, useRole } from "./lib/role";
 import { ConversationPane, NoConversation } from "./pages/ConversationPage";
 import { LeadPage } from "./pages/LeadPage";
 import { OverviewPage } from "./pages/OverviewPage";
@@ -15,8 +17,62 @@ const NAV = [
   { to: "/overview", label: "Обзор", hint: "руководитель VIP" },
 ];
 
+/** Demo role switcher: shapes the views, does not authorise anything (decision 0015). */
+function RoleSwitcher({ managers }: { managers: string[] }) {
+  const { role, setRole } = useRole();
+  const navigate = useNavigate();
+  const options: [string, string][] = [
+    ["all", "Все разделы"],
+    ...managers.map((m): [string, string] => [`manager:${m}`, `Я: ${m}`]),
+    ["lead", "Тимлид"],
+    ["head", "Руководитель"],
+  ];
+  return (
+    <label className="flex items-center gap-2 text-xs text-muted">
+      <span>Роль</span>
+      <select
+        value={roleValue(role)}
+        onChange={(e) => {
+          const next = parseRole(e.target.value);
+          setRole(next);
+          navigate(sectionsOf(next)[0] ?? "/queue");
+        }}
+        className="rounded-md bg-chip px-2 py-1 text-sm text-ink ring-1 ring-line"
+      >
+        {options.map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <span title="Симуляция ролей для показа, а не вход и не права доступа" className="rounded bg-warn-soft px-1.5 py-0.5 text-warn">
+        демо-режим
+      </span>
+    </label>
+  );
+}
+
+/** The start page: the first section of the current role. */
+function RoleHome() {
+  const { role } = useRole();
+  return <Navigate to={sectionsOf(role)[0] ?? "/queue"} replace />;
+}
+
+/** A section the current role does not see opens the role's first section instead. */
+function Gate({ path, children }: { path: string; children: ReactNode }) {
+  const { role } = useRole();
+  const allowed = sectionsOf(role);
+  if (allowed.includes(path)) return <>{children}</>;
+  return <Navigate to={allowed[0] ?? "/queue"} replace />;
+}
+
 function Shell() {
   const meta = useApi(() => api.meta(), "meta");
+  const { role } = useRole();
+  const sections = sectionsOf(role);
+  const nav = NAV.filter((n) => sections.includes(n.to)).sort(
+    (a, b) => sections.indexOf(a.to) - sections.indexOf(b.to),
+  );
 
   return (
     // On wide screens the shell fills the viewport and each pane scrolls on its own.
@@ -30,7 +86,7 @@ function Shell() {
             <span className="hidden text-sm text-muted sm:inline">разбор переписок VIP-отдела</span>
           </div>
           <nav aria-label="Разделы" className="flex gap-1 text-sm">
-            {NAV.map((n) => (
+            {nav.map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}
@@ -43,8 +99,9 @@ function Shell() {
               </NavLink>
             ))}
           </nav>
-          <div className="ml-auto text-xs text-muted">
-            {meta.data?.as_of && <>Данные на {formatDateTime(meta.data.as_of)}</>}
+          <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+            {meta.data && <RoleSwitcher managers={meta.data.managers} />}
+            {meta.data?.as_of && <span>Данные на {formatDateTime(meta.data.as_of)}</span>}
           </div>
         </div>
       </header>
@@ -86,25 +143,56 @@ function Contained() {
 /** Old /conversations/:id links (bookmarks, earlier builds) open in the inbox. */
 function ToInbox() {
   const { id = "" } = useParams();
-  return <Navigate to={`/queue/${encodeURIComponent(id)}`} replace />;
+  const { search } = useLocation();
+  return <Navigate to={`/queue/${encodeURIComponent(id)}${search}`} replace />;
 }
 
 export function AppRoutes() {
   return (
-    <Routes>
-      <Route element={<Shell />}>
-        <Route index element={<Navigate to="/queue" replace />} />
-        <Route path="queue" element={<QueuePage />}>
-          <Route index element={<NoConversation />} />
-          <Route path=":id" element={<ConversationPane />} />
+    <RoleProvider>
+      <Routes>
+        <Route element={<Shell />}>
+          <Route index element={<RoleHome />} />
+          <Route
+            path="queue"
+            element={
+              <Gate path="/queue">
+                <QueuePage />
+              </Gate>
+            }
+          >
+            <Route index element={<NoConversation />} />
+            <Route path=":id" element={<ConversationPane />} />
+          </Route>
+          <Route path="conversations/:id" element={<ToInbox />} />
+          <Route element={<Contained />}>
+            <Route
+              path="winback"
+              element={
+                <Gate path="/winback">
+                  <WinbackPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="lead"
+              element={
+                <Gate path="/lead">
+                  <LeadPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="overview"
+              element={
+                <Gate path="/overview">
+                  <OverviewPage />
+                </Gate>
+              }
+            />
+          </Route>
         </Route>
-        <Route path="conversations/:id" element={<ToInbox />} />
-        <Route element={<Contained />}>
-          <Route path="winback" element={<WinbackPage />} />
-          <Route path="lead" element={<LeadPage />} />
-          <Route path="overview" element={<OverviewPage />} />
-        </Route>
-      </Route>
-    </Routes>
+      </Routes>
+    </RoleProvider>
   );
 }
