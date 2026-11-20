@@ -32,6 +32,45 @@ class SafetySignal(BaseModel):
         return tuple(m for m in self.manager_offer_ids if position.get(m, -1) > first)
 
 
+def credit_before_security_check(
+    conv: Conversation, cfg: PolicyConfig, route: str
+) -> tuple[str, ...]:
+    """Manager messages crediting or promising a bonus in a security case (decision 0021).
+
+    Only for conversations routed to security. The anchor is the first player message with a
+    fraud or shared-account signal (or the first player message when only the analysis saw
+    it); a credit after it, before any security check, is a manager mistake. Uses the same
+    offer detection as «Бонус уязвимому игроку», refusals included.
+    """
+    if route != "security":
+        return ()
+
+    def credits(text: str) -> bool:
+        # Offer words with the offer rules; crediting verbs unless denied right before («не»).
+        return mentions_offer(text, cfg.offers) or mentions_phrase(text, cfg.safety.credit_words)
+
+    anchored = False
+    found: list[str] = []
+    for message in conv.messages:
+        if message.sender_role == SenderRole.PLAYER and not anchored:
+            text = message.text
+            anchored = contains_any(text, cfg.safety.fraud_security) or mentions_phrase(
+                text, cfg.safety.multi_account
+            )
+        elif message.sender_role == SenderRole.MANAGER and anchored and credits(message.text):
+            found.append(message.message_id)
+    if found or anchored:
+        return tuple(found)
+    # The analysis alone saw the risk: anchor on the first player message.
+    first = next((m for m in conv.messages if m.sender_role == SenderRole.PLAYER), None)
+    if first is None:
+        return ()
+    after = conv.messages[conv.messages.index(first) + 1 :]
+    return tuple(
+        m.message_id for m in after if m.sender_role == SenderRole.MANAGER and credits(m.text)
+    )
+
+
 def detect_safety(conv: Conversation, cfg: PolicyConfig) -> SafetySignal:
     rg_ids: list[str] = []
     fraud_ids: list[str] = []

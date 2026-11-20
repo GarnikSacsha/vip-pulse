@@ -118,7 +118,7 @@ function mistakesOf(item: QueueItem): Mistake[] {
   }));
   const byTiming: Mistake[] = item.rule_errors.map((e, i) => ({
     key: `${item.task_id}:${e.code}:${i}`,
-    label: `${RULE_ERROR_LABEL[e.code] ?? e.code}: ${formatWait(e.hours)}`,
+    label: `${RULE_ERROR_LABEL[e.code] ?? e.code}${e.hours === null ? "" : `: ${formatWait(e.hours)}`}`,
     source: "code",
     item,
     messageId: e.evidence_message_ids[0] ?? null,
@@ -200,7 +200,12 @@ function ManagerMistakes({ items }: { items: QueueItem[] }) {
                                 className={`hover:underline ${m.source === "code" ? "text-danger" : ""}`}
                               >
                                 {m.label}
-                                {m.source === "code" && <span className="text-muted"> (код)</span>}
+                                {m.source === "code" && (
+                                  <>
+                                    {" "}
+                                    <span className="text-muted">(код)</span>
+                                  </>
+                                )}
                               </Link>
                             </span>
                           ))}

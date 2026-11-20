@@ -52,6 +52,17 @@ safety:
 
   # Another account or a shared payment card in a player's message. Not a block and not a
   # mistake: an alert that the manager must contact the player personally and clarify.
+  # Crediting words (assumption, extend as needed): with the offer words below they mark a
+  # manager crediting a bonus before the security check of a fraud or shared-account case.
+  credit_words:
+    - начислю
+    - начислим
+    - начислил
+    - начислила
+    - начислено
+    - накину
+    - закину
+
   multi_account:
     - другой аккаунт
     - другого аккаунта

@@ -103,6 +103,7 @@ export const HANDED_OVER_STEP = "Передано специалисту: не �
 export const RULE_ERROR_LABEL: Record<string, string> = {
   late_reply: "Ответ позже SLA канала",
   waiting_past_sla: "Игрок ждёт дольше SLA",
+  offer_before_security_check: "Бонус до проверки безопасности",
 };
 
 export function qualityFlagLabel(flag: string): string {

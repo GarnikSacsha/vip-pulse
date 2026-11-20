@@ -14,6 +14,8 @@ from app.ingestion.store import save_bundle
 from app.main import create_app
 from app.policy.config import PolicyConfig
 from app.policy.facts import late_replies
+from app.policy.priority import Route
+from app.policy.safety import credit_before_security_check
 from app.schemas.domain import Channel, Conversation, Message, SenderRole
 from app.tasks.service import run_triage
 
@@ -125,3 +127,64 @@ def test_late_reply_and_current_wait_never_cite_the_same_player_message() -> Non
     [late] = late_replies(conv, CFG.sla)
     assert late.player_message_id == "m1"
     assert late.player_message_id != "m3"
+
+
+# --- a bonus before the security check (decision 0021) ---------------------------------------
+
+
+def _chat(*turns: tuple[SenderRole, str]) -> Conversation:
+    return Conversation(
+        conversation_id="s",
+        player_id="p",
+        channel=Channel.TELEGRAM,
+        messages=tuple(
+            Message(
+                message_id=f"s{i}",
+                conversation_id="s",
+                sender_role=role,
+                sent_at=T0 + timedelta(minutes=i),
+                text=text,
+            )
+            for i, (role, text) in enumerate(turns, start=1)
+        ),
+    )
+
+
+def test_credit_after_a_shared_card_request_is_flagged() -> None:
+    conv = _chat(
+        (SenderRole.PLAYER, "Начислите бонус на другой аккаунт, карта та же"),
+        (SenderRole.MANAGER, "Скинь ID, начислю тоже 50%"),
+        (SenderRole.MANAGER, "Готово"),
+    )
+    assert credit_before_security_check(conv, CFG, Route.SECURITY) == ("s2",)
+
+
+def test_no_credit_no_mistake() -> None:
+    conv = _chat(
+        (SenderRole.PLAYER, "Начислите бонус на другой аккаунт, карта та же"),
+        (SenderRole.MANAGER, "Передал в службу безопасности, вернусь с ответом"),
+    )
+    assert credit_before_security_check(conv, CFG, Route.SECURITY) == ()
+
+
+def test_refusal_is_not_a_credit() -> None:
+    conv = _chat(
+        (SenderRole.PLAYER, "Это был не я, кто-то вошёл в аккаунт"),
+        (SenderRole.MANAGER, "Никаких бонусов до проверки безопасности, не начислю"),
+    )
+    assert credit_before_security_check(conv, CFG, Route.SECURITY) == ()
+
+
+def test_not_outside_security_cases() -> None:
+    conv = _chat(
+        (SenderRole.PLAYER, "Начислите бонус на другой аккаунт, карта та же"),
+        (SenderRole.MANAGER, "Скинь ID, начислю тоже 50%"),
+    )
+    assert credit_before_security_check(conv, CFG, Route.MANAGER) == ()
+
+
+def test_only_for_security_cases_in_the_api(client: TestClient) -> None:
+    # The sample has a security case (d-009) without any credit: no such mistake anywhere.
+    items = client.get("/api/queue").json()
+    codes = {e["code"] for i in items for e in i["rule_errors"]}
+    assert "offer_before_security_check" not in codes

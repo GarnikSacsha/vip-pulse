@@ -35,8 +35,11 @@ class SafetyConfig(_Cfg):
     fraud_security: tuple[str, ...]
     # Another account or a shared card: the manager must contact the player personally.
     multi_account: tuple[str, ...] = ()
+    # Crediting words. With the offer words they mark a manager crediting a bonus before the
+    # security check of a fraud or shared-account case (decision 0021).
+    credit_words: tuple[str, ...] = ()
 
-    @field_validator("responsible_gaming", "fraud_security", "multi_account")
+    @field_validator("responsible_gaming", "fraud_security", "multi_account", "credit_words")
     @classmethod
     def _lower(cls, words: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(w.lower() for w in words)

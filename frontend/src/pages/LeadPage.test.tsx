@@ -277,3 +277,19 @@ describe("team lead page: conversations with mistakes vs mistakes", () => {
     expect(row).toHaveTextContent("1 (ошибок: 2)");
   });
 });
+
+describe("team lead page: bonus before the security check", () => {
+  it("lists it as counted by code with a link to the manager's message", async () => {
+    const item = queueItem({
+      task_id: 71,
+      conversation_id: "d-071",
+      route: "security",
+      rule_errors: [{ code: "offer_before_security_check", evidence_message_ids: ["m-071-2"], hours: null }],
+    });
+    serveApi(vi, { "/api/meta": meta, "/api/overview": overview, "/api/queue": [item] });
+    renderLead();
+    const panel = await screen.findByRole("region", { name: /Ошибки менеджеров/ });
+    const link = within(panel).getByRole("link", { name: "Бонус до проверки безопасности (код)" });
+    expect(link).toHaveAttribute("href", "/queue/d-071?msg=m-071-2");
+  });
+});

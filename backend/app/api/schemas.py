@@ -119,9 +119,11 @@ class WinbackOut(BaseModel):
 class RuleErrorOut(BaseModel):
     """A manager mistake counted by code from message times (decision 0019), not by the model."""
 
-    code: str  # late_reply | waiting_past_sla
-    evidence_message_ids: list[str]  # the player message answered late (or still waiting) first
-    hours: float
+    code: str  # late_reply | waiting_past_sla | offer_before_security_check (0021)
+    # late_reply / waiting_past_sla: the player message first; offer_before_security_check: the
+    # manager message that credited or promised the bonus.
+    evidence_message_ids: list[str]
+    hours: float | None  # None when time is not the point
 
 
 class QueueItem(BaseModel):

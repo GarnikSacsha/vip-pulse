@@ -31,6 +31,7 @@ from app.models import AnalysisRow, ConversationRow, PlayerRow, TaskRow
 from app.policy.config import PolicyConfig
 from app.policy.facts import compute_facts, late_replies
 from app.policy.priority import LABEL_MODEL, LABEL_SIMULATED, Route
+from app.policy.safety import credit_before_security_check
 from app.policy.sla import ReplyState, reply_state, sla_lane
 from app.schemas.analysis import ManagerError, Priority, ProcessingStatus
 from app.schemas.domain import Conversation, SenderRole
@@ -209,6 +210,10 @@ def _rule_errors(
             hours=r.hours,
         )
         for r in late_replies(conv, policy.sla)
+    ]
+    found += [
+        RuleErrorOut(code="offer_before_security_check", evidence_message_ids=[mid], hours=None)
+        for mid in credit_before_security_check(conv, policy, task.route)
     ]
     if late:
         human = [m for m in conv.messages if m.sender_role != SenderRole.SYSTEM]

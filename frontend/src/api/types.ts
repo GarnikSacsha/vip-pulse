@@ -98,7 +98,7 @@ export interface ManagerError {
 export interface RuleError {
   code: string;
   evidence_message_ids: string[]; // the player message answered late (or still waiting) first
-  hours: number;
+  hours: number | null; // null when time is not the point (offer_before_security_check)
 }
 
 export interface QueueItem {
