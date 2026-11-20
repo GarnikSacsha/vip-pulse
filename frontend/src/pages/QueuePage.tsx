@@ -68,6 +68,7 @@ function typing(target: EventTarget | null): boolean {
 export function QueuePage() {
   const { meta, reloadMeta } = useOutletContext<ShellContext>();
   const [pane, setPane] = useState<PaneTab>("analysis");
+  const [legendOpen, setLegendOpen] = useState(false);
   const { id: selected } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -156,7 +157,10 @@ export function QueuePage() {
       >
         <div className="shrink-0 px-4 pt-5 sm:px-5">
           <div className="flex items-end justify-between gap-3">
-            <h1 className="text-xl font-semibold tracking-tight">Очередь</h1>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-xl font-semibold tracking-tight">Очередь</h1>
+              <LegendToggle open={legendOpen} onToggle={() => setLegendOpen((v) => !v)} />
+            </div>
             <div role="group" className="flex items-center gap-1" aria-label="Фильтр по приоритету">
               {PRIORITIES.map((p) => (
                 <button
@@ -173,15 +177,17 @@ export function QueuePage() {
               ))}
             </div>
           </div>
-          <p className="mt-0.5 text-xs text-muted">
-            Сначала самое срочное, внутри приоритета — кто дольше ждёт.{" "}
-            <span className="hidden lg:inline">
-              <kbd className="font-mono">j</kbd>/<kbd className="font-mono">k</kbd> — следующий и предыдущий.
-            </span>
-          </p>
-          <p className="mt-0.5 text-xs text-muted">
-            Кружок: пустой — игрок не ждёт, кольцо заполняется к сроку SLA канала, закрашен с точкой — SLA нарушен.
-          </p>
+          {legendOpen && (
+            <div id={LEGEND_ID} className="mt-2 space-y-0.5 rounded-md bg-chip px-2.5 py-2 text-xs text-muted">
+              <p>
+                Сначала самое срочное, внутри приоритета — кто дольше ждёт.{" "}
+                <span className="hidden lg:inline">
+                  <kbd className="font-mono">j</kbd>/<kbd className="font-mono">k</kbd> — следующий и предыдущий.
+                </span>
+              </p>
+              <p>Кружок: пустой — игрок не ждёт, кольцо заполняется к сроку SLA канала, закрашен с точкой — SLA нарушен.</p>
+            </div>
+          )}
           {manager && !roleManager && (
             <button
               type="button"
@@ -312,9 +318,30 @@ const ROW_ACCENT: Record<Priority, string> = {
   P3: "before:bg-transparent",
 };
 
+const LEGEND_ID = "queue-legend";
+
+/** The legend is read once; a help toggle keeps it off the most valuable part of the screen. */
+function LegendToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label="Как читать очередь"
+      aria-expanded={open}
+      aria-controls={LEGEND_ID}
+      onClick={onToggle}
+      className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold ring-1 ring-inset transition-colors ${
+        open ? "bg-ink text-white ring-ink" : "text-muted ring-line hover:text-ink"
+      }`}
+    >
+      ?
+    </button>
+  );
+}
+
 function QueueRow({ item, search }: { item: QueueItem; search: string }) {
   const roleManager = managerOf(useRole().role);
   const name = item.player.display_name ?? item.player.player_id;
+  const step = roleManager && item.route !== "manager" ? HANDED_OVER_STEP : (item.next_action ?? "Действий не требуется");
   return (
     <NavLink
       to={{ pathname: `/queue/${encodeURIComponent(item.conversation_id)}`, search }}
@@ -331,8 +358,9 @@ function QueueRow({ item, search }: { item: QueueItem; search: string }) {
       <div className="min-w-0">
         <p className="truncate text-sm font-medium">{name}</p>
         <p className="mt-0.5 truncate text-xs text-muted">
-          {item.category ? CATEGORY_LABEL[item.category] : "Разбор не выполнен"}
-          <span aria-hidden="true"> · </span>
+          {/* «Общее» says nothing about the request, so the row starts with the channel. */}
+          {!item.category ? "Разбор не выполнен" : item.category !== "general" && CATEGORY_LABEL[item.category]}
+          {item.category !== "general" && <span aria-hidden="true"> · </span>}
           {CHANNEL_LABEL[item.channel]}
           {item.player.segment && (
             <>
@@ -353,15 +381,14 @@ function QueueRow({ item, search }: { item: QueueItem; search: string }) {
               {tag}
             </Tag>
           ))}
-          {item.overdue && <Tag tone="danger">Просрочено</Tag>}
           {item.requires_review && <Tag tone="warn">Нужна проверка</Tag>}
           {(item.status === "in_progress" || item.status === "resolved") && (
             <Tag tone={item.status === "resolved" ? "ok" : "accent"}>{STATUS_LABEL[item.status]}</Tag>
           )}
           {item.simulated && <Tag>демо</Tag>}
         </div>
-        <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted">
-          {roleManager && item.route !== "manager" ? HANDED_OVER_STEP : (item.next_action ?? "Действий не требуется")}
+        <p className="mt-1.5 truncate text-xs leading-relaxed text-muted" title={step}>
+          {step}
         </p>
       </div>
 
