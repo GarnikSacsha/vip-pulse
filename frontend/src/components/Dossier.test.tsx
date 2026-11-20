@@ -24,6 +24,8 @@ const EMPTY: PlayerProfile = {
   last_login_at: null,
   birthday: null,
   favorite_game: null,
+  deposits_change_pct: null,
+  deposit_drop: null,
 };
 
 function player(profile: Partial<PlayerProfile>): Player {
@@ -78,7 +80,7 @@ describe("player card", () => {
     const account = screen.getByRole("region", { name: "Аккаунт" });
     expect(row(account, "Статус")).toBe("Активен");
     expect(row(account, "Бренд")).toBe("ACME");
-    expect(row(account, "Язык")).toBe("ru");
+    expect(row(account, "Язык")).toBe("русский");
 
     const money = screen.getByRole("region", { name: "Деньги" });
     expect(row(money, "Депозиты 30 дн.")).toBe("$1 000 · 5 шт.");
@@ -107,5 +109,29 @@ describe("player card", () => {
     const money = screen.getByRole("region", { name: "Деньги" });
     expect(row(money, "Вывод в ожидании")).toBe("—");
     expect(row(screen.getByRole("region", { name: "Аккаунт" }), "Статус")).toBe("—");
+  });
+});
+
+describe("player card: language and deposit change", () => {
+  it("names the language and shows the 30-day change, highlighting a drop past the threshold", () => {
+    renderCard(
+      player({
+        language: "ru",
+        deposits_30d_usd: 100,
+        deposits_30d_count: 1,
+        deposits_change_pct: -90,
+        deposit_drop: true,
+      }),
+    );
+    const account = screen.getByRole("region", { name: "Аккаунт" });
+    expect(row(account, "Язык")).toBe("русский");
+    const money = screen.getByRole("region", { name: "Деньги" });
+    expect(row(money, "Депозиты 30 дн.")).toBe("$100 · 1 шт. · −90%");
+    expect(within(money).getByText("−90%")).toHaveAttribute("data-alert", "true");
+  });
+
+  it("shows an unknown language code as it is", () => {
+    renderCard(player({ language: "xx" }));
+    expect(row(screen.getByRole("region", { name: "Аккаунт" }), "Язык")).toBe("xx");
   });
 });

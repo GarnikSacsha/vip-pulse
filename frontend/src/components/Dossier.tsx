@@ -24,6 +24,27 @@ const RESTRICTION_NOTE: Record<string, string> = {
   limit_set: "Установлен лимит: не предлагать бонусы и повышение лимита.",
 };
 
+const LANGUAGE: Record<string, string> = {
+  ru: "русский",
+  en: "английский",
+  uk: "украинский",
+  de: "немецкий",
+  pl: "польский",
+  es: "испанский",
+  pt: "португальский",
+  fr: "французский",
+  it: "итальянский",
+  tr: "турецкий",
+  kk: "казахский",
+  fi: "финский",
+};
+
+/** "+11%" / "−90%" with a real minus sign. */
+function change(pct: number): string {
+  const rounded = Math.round(pct);
+  return rounded < 0 ? `−${-rounded}%` : `+${rounded}%`;
+}
+
 const dash = "—";
 const usd = (n: number | null) => (n === null ? dash : `$${Math.round(n).toLocaleString("ru-RU").replace(/\s/g, " ")}`);
 const day = (s: string | null) => (s ? formatDay(s) : dash);
@@ -80,7 +101,7 @@ function PlayerCard({ player }: { player: Player }) {
           ["Сегмент", player.segment ?? dash],
           ["Менеджер", player.manager_id ?? "не закреплён"],
           ["Бренд", p?.brand ?? dash],
-          ["Язык", p?.language ?? dash],
+          ["Язык", p?.language ? (LANGUAGE[p.language.toLowerCase()] ?? p.language) : dash],
           ["Гео", p?.geo ?? player.country ?? dash],
           ["VIP с", day(player.registered_at ?? null)],
         ]}
@@ -88,7 +109,24 @@ function PlayerCard({ player }: { player: Player }) {
       <Group
         title="Деньги"
         rows={[
-          ["Депозиты 30 дн.", amount(p?.deposits_30d_usd ?? null, p?.deposits_30d_count ?? null)],
+          [
+            "Депозиты 30 дн.",
+            <>
+              {amount(p?.deposits_30d_usd ?? null, p?.deposits_30d_count ?? null)}
+              {p?.deposits_change_pct != null && (
+                <>
+                  {" · "}
+                  <span
+                    data-alert={String(Boolean(p.deposit_drop))}
+                    title="К прошлым 30 дням; падение ниже порога из thresholds.yaml выделено"
+                    className={p.deposit_drop ? "font-medium text-danger" : ""}
+                  >
+                    {change(p.deposits_change_pct)}
+                  </span>
+                </>
+              )}
+            </>,
+          ],
           ["Пред. 30 дн.", amount(p?.deposits_prev_30d_usd ?? null, p?.deposits_prev_30d_count ?? null)],
           ["Последний депозит", day(p?.last_deposit_at ?? null)],
           ["Неудачные депозиты 7 дн.", p?.failed_deposits_7d ?? dash],

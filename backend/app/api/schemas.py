@@ -62,6 +62,10 @@ class PlayerProfile(BaseModel):
     last_login_at: str | None = None
     birthday: str | None = None
     favorite_game: str | None = None
+    # Derived in code: change of the 30-day deposits against the 30 days before, and whether it
+    # fell below `player.deposit_drop_share` of them (thresholds.yaml).
+    deposits_change_pct: float | None = None
+    deposit_drop: bool | None = None
 
 
 class PlayerOut(BaseModel):

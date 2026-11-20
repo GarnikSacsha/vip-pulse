@@ -50,7 +50,7 @@ def _as_of(session: Session) -> datetime | None:
     return session.scalar(select(func.max(ConversationRow.last_message_at)))
 
 
-def _player(row: PlayerRow) -> PlayerOut:
+def _player(row: PlayerRow, policy: PolicyConfig | None = None) -> PlayerOut:
     return PlayerOut(
         player_id=row.player_id,
         display_name=row.display_name,
@@ -58,14 +58,19 @@ def _player(row: PlayerRow) -> PlayerOut:
         segment=row.segment,
         country=row.attributes.get("country") if row.attributes else None,
         registered_at=row.attributes.get("registered_at") if row.attributes else None,
-        profile=_profile(row.attributes or {}),
+        profile=_profile(row.attributes or {}, policy),
     )
 
 
-def _profile(attrs: dict[str, Any]) -> PlayerProfile:
-    """Typed profile from the attributes an adapter kept. A value that does not parse is None."""
+def _profile(attrs: dict[str, Any], policy: PolicyConfig | None = None) -> PlayerProfile:
+    """Typed profile from the attributes an adapter kept. A value that does not parse is None.
+
+    With the policy, the 30-day deposit change and the drop flag (`player.deposit_drop_share`).
+    """
     values: dict[str, Any] = {}
     for name, field in PlayerProfile.model_fields.items():
+        if name in DERIVED:
+            continue
         raw = attrs.get(name)
         text = str(raw).strip() if raw is not None else ""
         if not text:
@@ -77,7 +82,15 @@ def _profile(attrs: dict[str, Any]) -> PlayerProfile:
             values[name] = int(number) if number is not None and number.is_integer() else None
         else:
             values[name] = text
+    now, before = values.get("deposits_30d_usd"), values.get("deposits_prev_30d_usd")
+    if now is not None and before:
+        values["deposits_change_pct"] = round((now - before) / before * 100, 1)
+        if policy is not None:
+            values["deposit_drop"] = now < before * policy.player.deposit_drop_share
     return PlayerProfile(**values)
+
+
+DERIVED = frozenset({"deposits_change_pct", "deposit_drop"})
 
 
 def _to_number(text: str) -> float | None:
@@ -263,7 +276,7 @@ def list_queue(
             QueueItem(
                 task_id=task.id,
                 conversation_id=conv.conversation_id,
-                player=_player(player),
+                player=_player(player, policy),
                 channel=conv.channel,
                 status=task.status,
                 priority=task.priority,
@@ -352,7 +365,7 @@ def conversation_detail(
     return ConversationDetail(
         conversation_id=conv.conversation_id,
         channel=conv.channel,
-        player=_player(player),
+        player=_player(player, policy),
         messages=[
             MessageOut(
                 message_id=m.message_id,

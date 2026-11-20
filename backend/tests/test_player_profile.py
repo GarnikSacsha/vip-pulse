@@ -61,6 +61,8 @@ def test_profile_carries_every_task_column(task_client: TestClient) -> None:
         "last_login_at": "2026-01-10",
         "birthday": "1990-01-01",
         "favorite_game": "Demo Slot",
+        "deposits_change_pct": 11.1,
+        "deposit_drop": False,
     }
 
 
@@ -72,3 +74,16 @@ def test_a_format_without_these_columns_gives_empty_values(sample_paths) -> None
     with _client("sample_v1", *sample_paths) as client:
         profile = _player(client, "p-002")["profile"]
     assert set(profile.values()) == {None}
+
+
+def test_deposit_change_and_drop_use_the_threshold() -> None:
+    from app.api.queue import _profile
+
+    cfg = PolicyConfig.load()
+    drop = _profile({"deposits_30d_usd": "100", "deposits_prev_30d_usd": "1000"}, cfg)
+    assert drop.deposits_change_pct == -90.0
+    assert drop.deposit_drop is True  # below deposit_drop_share of the previous 30 days
+    rise = _profile({"deposits_30d_usd": "1000", "deposits_prev_30d_usd": "900"}, cfg)
+    assert rise.deposits_change_pct == 11.1
+    assert rise.deposit_drop is False
+    assert _profile({"deposits_30d_usd": "5"}, cfg).deposits_change_pct is None

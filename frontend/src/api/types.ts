@@ -70,6 +70,8 @@ export interface PlayerProfile {
   last_login_at: string | null;
   birthday: string | null;
   favorite_game: string | null;
+  deposits_change_pct?: number | null; // derived: 30-day deposits against the 30 days before
+  deposit_drop?: boolean | null; // fell below player.deposit_drop_share (thresholds.yaml)
 }
 
 export interface Reason {
