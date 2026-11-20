@@ -125,11 +125,12 @@ describe("queue page: oversight links", () => {
     expect(queueCalls(calls).at(-1)).toBe("/api/queue?status=open&status=in_progress");
   });
 
-  it("marks overdue items", async () => {
+  it("marks overdue items by the ring alone, without a duplicate tag", async () => {
     serveApi(vi, { "/api/meta": meta, "/api/queue": [queueItem()] });
     renderQueue();
     const row = await screen.findByRole("link", { name: /Demo Player 001/ });
-    expect(within(row).getByText("Просрочено")).toBeInTheDocument();
+    expect(within(row).getByRole("img", { name: /SLA нарушен/ })).toBeInTheDocument();
+    expect(within(row).queryByText("Просрочено")).not.toBeInTheDocument();
   });
 });
 
@@ -336,6 +337,7 @@ describe("queue page: why a long wait is low priority", () => {
     const [first, second] = await screen.findAllByRole("link", { name: /Demo Player 03/ });
     expect(first).toHaveTextContent("не требует ответа (AI)");
     expect(second).toHaveTextContent("ход за игроком");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Как читать очередь" }));
     expect(screen.getByText(/кольцо заполняется/)).toBeInTheDocument();
   });
 });
@@ -377,5 +379,43 @@ describe("queue page: tab counts follow the priority filter", () => {
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
     expect(tabs).toEqual(["Активные 1", "Все 2", "Решённые 1", "Без действий 0"]);
     expect(calls).toContain("/api/queue?priority=P0");
+  });
+});
+
+describe("queue page: less noise", () => {
+  it("keeps the legend behind a help button", async () => {
+    const user = userEvent.setup();
+    serveApi(vi, { "/api/meta": meta, "/api/queue": [queueItem()] });
+    renderQueue();
+    await screen.findAllByRole("link", { name: /Demo Player/ });
+    expect(screen.queryByText(/Кружок/)).not.toBeInTheDocument();
+
+    const help = screen.getByRole("button", { name: "Как читать очередь" });
+    expect(help).toHaveAttribute("aria-expanded", "false");
+    await user.click(help);
+    expect(help).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(/Кружок/)).toBeInTheDocument();
+    expect(screen.getByText(/Сначала самое срочное/)).toBeInTheDocument();
+  });
+
+  it("does not show the uninformative «Общее» category", async () => {
+    serveApi(vi, {
+      "/api/meta": meta,
+      "/api/queue": [queueItem({ task_id: 7, conversation_id: "d-007", category: "general" })],
+    });
+    renderQueue();
+    const row = await screen.findByRole("link", { name: /Demo Player/ });
+    expect(row).not.toHaveTextContent("Общее");
+    expect(row).toHaveTextContent("Telegram");
+  });
+
+  it("shows the next step on one line, with the full text on hover", async () => {
+    const step = "Проверить статус вывода у платёжной команды и ответить игроку сегодня";
+    serveApi(vi, { "/api/meta": meta, "/api/queue": [queueItem({ next_action: step })] });
+    renderQueue();
+    const row = await screen.findByRole("link", { name: /Demo Player/ });
+    const p = within(row).getByText(step);
+    expect(p).toHaveClass("truncate");
+    expect(p).toHaveAttribute("title", step);
   });
 });

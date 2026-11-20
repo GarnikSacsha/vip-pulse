@@ -131,7 +131,8 @@ adapter into a separate database ([decision 0010](docs/decisions/0010-task-data-
 1. **Inbox (`/queue`):** three P0 items on top. A withdrawal unanswered for 27 h (its ring is
    solid red: SLA breached), a possible account takeover routed to security, and a player asking
    to be blocked who was offered free spins (flagged "Бонус уязвимому игроку"). Press `j` / `k`
-   to walk through the queue; the conversation and its analysis open next to the list.
+   to walk through the queue; the conversation and its analysis open next to the list. The «?»
+   next to «Очередь» explains the order and the rings.
 2. **Open d-004:** hover the numbered pill next to the summary: the cited message lights up in
    the timeline. A red "do not offer bonuses" warning and the route to a responsible-gaming
    specialist sit above. With the offline heuristic the analysis card is hatched and labelled «демо».
