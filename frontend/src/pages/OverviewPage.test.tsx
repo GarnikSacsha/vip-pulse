@@ -21,7 +21,9 @@ describe("head of VIP page", () => {
     expect(tiles.getByText("Ждут действий").closest("li")).toHaveTextContent("5 из 9");
     expect(tiles.getByText("Критичные").closest("li")).toHaveTextContent("3");
     // 4 players wait for an answer, 1 of them past the SLA.
-    expect(tiles.getByText("Ответ в рамках SLA").closest("li")).toHaveTextContent("3 из 4");
+    const sla = tiles.getByText("Ответ в рамках SLA").closest("li");
+    expect(sla).toHaveTextContent("3 из 4 ответят в срок");
+    expect(sla).toHaveTextContent("эскалированные к специалисту не входят");
   });
 
   it("breaks requests down by category and channel", async () => {
@@ -76,5 +78,15 @@ describe("head of VIP page: where the numbers come from", () => {
   it("mentions conversations that are not triaged yet", async () => {
     const region = await source({ conversations: 12, in_queue: 9 });
     expect(region).toHaveTextContent("3 ещё не разобраны");
+  });
+});
+
+describe("head of VIP page: SLA tile wording", () => {
+  it("says so plainly when every waiting player is past the SLA", async () => {
+    const allLate = { ...overview, totals: { ...overview.totals, awaiting_reply: 10, overdue: 10 } };
+    serveApi(vi, { "/api/meta": meta, "/api/overview": allLate });
+    renderOverview();
+    const tiles = within(await screen.findByRole("list", { name: "Ключевые показатели" }));
+    expect(tiles.getByText("Ответ в рамках SLA").closest("li")).toHaveTextContent("Все 10 ждущих — просрочены");
   });
 });
