@@ -109,8 +109,10 @@ system temp directory on the dev machine cannot be cleaned by pytest.
 - Player signals (decision 0011): PR #8, merged. Alerts, «Кого вернуть», brief: PR #9, merged.
 - Manager audit fixes (decisions 0013–0021): PR #10, merged. Task files re-analysed with prompt v4
   on 2026-11-20 ($0.062, approved by Denys).
-- Screenshots (synthetic sample only, public repo): PR #11. The demo video script is kept
-  locally, outside Git (Denys, 2026-11-20); the video is recorded by Denys.
+- Screenshots (synthetic sample only, public repo): PR #11, merged. The demo video script is
+  kept locally, outside Git (Denys, 2026-11-20); the video is recorded by Denys.
+- Queue list declutter (legend behind «?», no duplicate overdue tag, no «Общее», one-line next
+  step): PR #12, merged.
 - Deadline: task received 2026-11-18, submission 2026-11-20.
 - Strict TDD with RED/GREEN evidence recorded in every PR.
 - Commit map: written before each stage; one atomic GREEN commit per coherent outcome.
