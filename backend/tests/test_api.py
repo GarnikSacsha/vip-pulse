@@ -199,7 +199,7 @@ def test_unknown_task_is_404(client: TestClient) -> None:
 
 
 def test_triage_can_be_rerun_from_the_api(client: TestClient) -> None:
-    body = client.post("/api/triage/run").json()
+    body = client.post("/api/triage/run", json={}).json()
     assert body == {
         "analysed": 0,
         "reused": 9,
@@ -368,9 +368,9 @@ def test_coverage_counts_imported_conversations_not_yet_triaged(sample_paths) ->
 
 def test_concurrent_triage_run_is_rejected(client: TestClient) -> None:
     with RUN_LOCK:
-        response = client.post("/api/triage/run")
+        response = client.post("/api/triage/run", json={})
     assert response.status_code == 409
-    assert client.post("/api/triage/run").status_code == 200
+    assert client.post("/api/triage/run", json={}).status_code == 200
 
 
 class MeteredProvider(FakeProvider):
@@ -465,3 +465,36 @@ def test_conversation_marks_manager_error_messages_as_evidence(client: TestClien
 def test_meta_lists_managers_from_the_data(client: TestClient) -> None:
     # For the demo role switcher: the managers come from players.csv, nothing is hard-coded.
     assert client.get("/api/meta").json()["managers"] == ["mgr-01", "mgr-02"]
+
+
+# --- audit fixes: thresholds re-read on every run; no cross-site trigger of a paid run -------
+
+
+def test_triage_run_needs_a_json_request(client: TestClient) -> None:
+    # A plain form post from another site cannot carry this content type without a preflight.
+    response = client.post("/api/triage/run")
+    assert response.status_code == 415
+    assert client.post("/api/triage/run", json={}).status_code == 200
+
+
+def test_api_rereads_changed_thresholds(sample_paths, tmp_path) -> None:
+    from pathlib import Path
+
+    from app.policy.config import DEFAULT_POLICY_PATH
+
+    path = tmp_path / "thresholds.yaml"
+    text = Path(DEFAULT_POLICY_PATH).read_text(encoding="utf-8")
+    path.write_text(text, encoding="utf-8")
+    with TestClient(create_app(engine=_engine(sample_paths), policy_path=path)) as client:
+        assert _item(client, "d-001")["priority"] == "P0"  # withdrawal waiting 27 h > 24 h
+        path.write_text(
+            text.replace("critical_wait_hours: 24", "critical_wait_hours: 48"), encoding="utf-8"
+        )
+        assert client.post("/api/triage/run", json={}).status_code == 200
+        assert _item(client, "d-001")["priority"] == "P1"
+
+
+def _item(client: TestClient, conversation_id: str) -> dict:
+    return next(
+        i for i in client.get("/api/queue").json() if i["conversation_id"] == conversation_id
+    )

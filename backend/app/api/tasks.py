@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.analysis.llm import LLMProvider
-from app.api.deps import get_policy, get_provider, get_session
+from app.api.deps import get_policy, get_provider, get_session, require_json
 from app.api.schemas import ReasonOut, TaskOut
 from app.config import get_settings
 from app.models import AuditRow, TaskRow
@@ -110,7 +110,7 @@ def task_audit(task_id: int, session: SessionDep) -> list[AuditOut]:
     ]
 
 
-@router.post("/triage/run", response_model=RunSummaryOut)
+@router.post("/triage/run", response_model=RunSummaryOut, dependencies=[Depends(require_json)])
 def rerun_triage(
     session: SessionDep,
     provider: Annotated[LLMProvider, Depends(get_provider)],
